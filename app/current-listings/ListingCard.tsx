@@ -132,11 +132,11 @@ export default function ListingCard({ listing }: Props) {
           <p className="text-[9px] text-gray-500">{timerLabel}</p>
 
                     <div className="px-3 py-1.5 bg-white border border-gold rounded-lg shadow-sm">
-            <AdminAuctionTimer
-              start={auction_start ?? null}
-              end={auction_end ?? null}
-              status={status ?? null}
-            />
+           <AdminAuctionTimer
+  start={auction_start ?? null}
+  end={auction_end ?? null}
+  status={status ?? ""}
+/>
           </div>
         </div>
 

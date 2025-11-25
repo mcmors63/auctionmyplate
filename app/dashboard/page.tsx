@@ -666,7 +666,7 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-yellow-700">
-              Seller Dashboard
+              My Dashboard
             </h1>
             <p className="text-sm text-gray-600 mt-1">
               Welcome,{" "}
@@ -1430,15 +1430,16 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* TRANSACTIONS TAB */}
+               {/* TRANSACTIONS TAB */}
         {activeTab === "transactions" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold mb-2 text-yellow-700">
-              Transactions &amp; Payouts
+              Transactions &amp; Documents
             </h2>
             <p className="text-sm text-gray-600 mb-2">
-              Completed sales, commission and your expected payouts will appear
-              here once plates are sold.
+              Active sales and purchases where documents, payment and DVLA
+              transfer are still in progress. You can upload required documents
+              for any sale where we&apos;re waiting on you.
             </p>
 
             {transactions.length === 0 ? (
@@ -1479,6 +1480,10 @@ export default function DashboardPage() {
                     (tx as any).listing_id ||
                     "N/A";
 
+                  const isSeller = tx.seller_email === user?.email;
+                  const isAwaitingDocs =
+                    tx.transaction_status === "awaiting_documents";
+
                   return (
                     <div
                       key={tx.$id}
@@ -1489,11 +1494,11 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-4">
                           {/* Plate visual */}
                           <NumberPlate
-  reg={regText}
-  size="card"
-  variant="rear"
-  showBlueBand={true}
-/>
+                            reg={regText}
+                            size="card"
+                            variant="rear"
+                            showBlueBand={true}
+                          />
 
                           {/* Text details */}
                           <div>
@@ -1505,6 +1510,10 @@ export default function DashboardPage() {
                             </p>
                             <p className="text-xs text-gray-500">
                               Transaction ID: {tx.$id}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Role:{" "}
+                              {isSeller ? "Seller (you are being paid)" : "Buyer"}
                             </p>
                           </div>
                         </div>
@@ -1550,8 +1559,8 @@ export default function DashboardPage() {
                         </p>
                       </div>
 
-                      {/* Seller documents uploader */}
-                      {tx.transaction_status === "awaiting_documents" && (
+                      {/* Seller documents uploader for active sales */}
+                      {isSeller && isAwaitingDocs && profile && (
                         <div className="mt-4 border-t pt-3">
                           <p className="text-xs text-gray-600 mb-2">
                             To progress this sale, please upload your DVLA
@@ -1560,10 +1569,10 @@ export default function DashboardPage() {
                             them before processing your payout.
                           </p>
                           <SellerDocumentsUploader
-  sellerId={profile?.$id ?? ""}
-  transactionId={tx.$id}
-  existingDocuments={tx.documents || []}
-/>
+                            sellerId={profile.$id}
+                            transactionId={tx.$id}
+                            existingDocuments={(tx as any).documents || []}
+                          />
                         </div>
                       )}
                     </div>

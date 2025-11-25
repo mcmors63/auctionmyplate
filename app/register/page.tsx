@@ -233,22 +233,19 @@ export default function RegisterPage() {
         formData.password
       );
 
-      // Send verification
-      const verifyUrl = `${
-        process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-      }/verified`;
+     // Send verification
+const verifyUrl = `${window.location.origin.replace(/\/$/, "")}/verified`;
+await account.createVerification(verifyUrl);
 
-      await account.createVerification(verifyUrl);
-
-      // Save profile  ✅ FIXED: use PROFILES db + collection env vars
-      await databases.createDocument(
-        process.env.NEXT_PUBLIC_APPWRITE_PROFILES_DATABASE_ID!,
-        process.env.NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID!,
-        ID.unique(),
-        {
-          first_name: formData.first_name,
-          surname: formData.surname,
-          house: formData.house,
+// Save profile  ✅ FIXED: use PROFILES db + collection env vars
+await databases.createDocument(
+  process.env.NEXT_PUBLIC_APPWRITE_PROFILES_DATABASE_ID!,
+  process.env.NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID!,
+  ID.unique(),
+  {
+    first_name: formData.first_name,
+    surname: formData.surname,
+    house: formData.house,
           street: formData.street,
           town: formData.town,
           county: formData.county,

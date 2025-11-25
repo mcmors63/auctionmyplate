@@ -8,6 +8,7 @@ import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import NumberPlate from "@/components/ui/NumberPlate";
 import AdminAuctionTimer from "@/components/ui/AdminAuctionTimer";
 import SellerDocumentsUploader from "@/components/ui/SellerDocumentsUploader";
+import { getAuctionWindow } from "@/lib/getAuctionWindow";
 
 // -----------------------------
 // Appwrite setup
@@ -1179,107 +1180,108 @@ export default function DashboardPage() {
             ) : (
               <div className="grid gap-4">
                 {approvedPlates.map((p) => {
-                  const now = new Date();
-                  const start = p.auction_start
-                    ? new Date(new Date(p.auction_start).toISOString())
-                    : null;
-                  const end = p.auction_end
-                    ? new Date(new Date(p.auction_end).toISOString())
-                    : null;
+  const now = new Date();
 
-                  const canWithdraw = !!(start && now < start);
+  // Fallback to next weekly auction window if explicit dates are missing
+  const { nextStart, nextEnd } = getAuctionWindow(now);
 
-                  return (
-                    <div
-                      key={p.$id}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
-                    >
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-xl font-bold text-yellow-700">
-                          {p.registration}
-                        </h3>
+  const start = p.auction_start
+    ? new Date(p.auction_start)
+    : nextStart;
 
-                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-800">
-                          Approved / Queued
-                        </span>
-                      </div>
+  const end = p.auction_end
+    ? new Date(p.auction_end)
+    : nextEnd;
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700">
-                        <p>
-                          <strong>Reserve:</strong> £{p.reserve_price}
-                        </p>
-                        <p>
-                          <strong>Starting Price:</strong> £
-                          {p.starting_price || 0}
-                        </p>
-                        <p>
-                          <strong>Buy Now:</strong>{" "}
-                          {p.buy_now ? `£${p.buy_now}` : "—"}
-                        </p>
-                      </div>
+  const canWithdraw = !!(start && now < start);
 
-                      <div className="mt-3 text-sm text-gray-700">
-                        <strong>Auction Window: </strong>
-                        {start
-                          ? start.toLocaleString("en-GB", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })
-                          : "TBC"}{" "}
-                        –{" "}
-                        {end
-                          ? end.toLocaleString("en-GB", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })
-                          : "TBC"}
-                      </div>
+  return (
+    <div
+      key={p.$id}
+      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+    >
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-xl font-bold text-yellow-700">
+          {p.registration}
+        </h3>
 
-                      <div className="mt-2">
-                        <AdminAuctionTimer
-                          start={p.auction_start ?? null}
-                          end={p.auction_end ?? null}
-                          status="queued"
-                        />
-                      </div>
+        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-800">
+          Approved / Queued
+        </span>
+      </div>
 
-                      {canWithdraw && (
-                        <button
-                          className="mt-4 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md text-sm"
-                          onClick={async () => {
-                            try {
-                              const res = await fetch("/api/withdraw-listing", {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify({ listingId: p.$id }),
-                              });
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700">
+        <p>
+          <strong>Reserve:</strong> £{p.reserve_price}
+        </p>
+        <p>
+          <strong>Starting Price:</strong> £
+          {p.starting_price || 0}
+        </p>
+        <p>
+          <strong>Buy Now:</strong>{" "}
+          {p.buy_now ? `£${p.buy_now}` : "—"}
+        </p>
+      </div>
 
-                              if (res.ok) {
-                                setApprovedPlates((prev) =>
-                                  prev.filter((x) => x.$id !== p.$id)
-                                );
-                                alert("Listing withdrawn successfully.");
-                              } else {
-                                alert("Failed to withdraw listing.");
-                              }
-                            } catch (err) {
-                              console.error(err);
-                              alert("Something went wrong.");
-                            }
-                          }}
-                        >
-                          Withdraw from Auction
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+      <div className="mt-3 text-sm text-gray-700">
+        <strong>Auction Window: </strong>
+        {start
+          ? start.toLocaleString("en-GB", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })
+          : "TBC"}{" "}
+        –{" "}
+        {end
+          ? end.toLocaleString("en-GB", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })
+          : "TBC"}
+      </div>
+
+      <div className="mt-2">
+        <AdminAuctionTimer
+          start={p.auction_start}
+          end={p.auction_end}
+          status="queued"
+        />
+      </div>
+
+      {canWithdraw && (
+        <button
+          className="mt-4 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md text-sm"
+          onClick={async () => {
+            try {
+              const res = await fetch("/api/withdraw-listing", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ listingId: p.$id }),
+              });
+
+              if (res.ok) {
+                setApprovedPlates((prev) =>
+                  prev.filter((x) => x.$id !== p.$id)
+                );
+                alert("Listing withdrawn successfully.");
+              } else {
+                alert("Failed to withdraw listing.");
+              }
+            } catch (err) {
+              console.error(err);
+              alert("Something went wrong.");
+            }
+          }}
+        >
+          Withdraw from Auction
+        </button>
+      )}
+    </div>
+  );
+})}
 
         {/* LIVE TAB */}
         {activeTab === "live" && (

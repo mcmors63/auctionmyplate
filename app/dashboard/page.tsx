@@ -468,15 +468,16 @@ const handleSellSubmit = async (e: React.FormEvent) => {
   }
 
   const reserve = parseFloat(sellForm.reserve_price);
-  const starting = sellForm.starting_price
-    ? parseFloat(sellForm.starting_price)
-    : 0;
-  const buyNow = sellForm.buy_now ? parseFloat(sellForm.buy_now) : 0;
+const starting = sellForm.starting_price
+  ? parseFloat(sellForm.starting_price)
+  : 0;
+const buyNow = sellForm.buy_now ? parseFloat(sellForm.buy_now) : 0;
 
-  if (isNaN(reserve) || reserve <= 0) {
-    setSellError("Please enter a valid reserve price above £0.");
-    return;
-  }
+// 🔒 Enforce minimum reserve price of £300
+if (isNaN(reserve) || reserve < 300) {
+  setSellError("Minimum reserve price is £300.");
+  return;
+}
 
   if (!isNaN(starting) && starting > 0 && starting >= reserve) {
     setSellError("Starting price must be lower than the reserve price.");
@@ -589,7 +590,7 @@ const handleSellSubmit = async (e: React.FormEvent) => {
       [Query.equal("seller_email", user.email)]
     );
 
-    const docs = platesRes.documents as Plate[];
+    const docs = platesRes.documents as unknown as Plate[];
     setAwaitingPlates(docs.filter((p) => p.status === "pending"));
     setApprovedPlates(docs.filter((p) => p.status === "queued"));
     setLivePlates(docs.filter((p) => p.status === "live"));

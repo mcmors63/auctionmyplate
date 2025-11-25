@@ -110,7 +110,13 @@ export default function DashboardPage() {
 
   // Tabs
   const [activeTab, setActiveTab] = useState<
-    "profile" | "sell" | "awaiting" | "approvedQueued" | "live" | "history" | "transactions"
+    | "profile"
+    | "sell"
+    | "awaiting"
+    | "approvedQueued"
+    | "live"
+    | "history"
+    | "transactions"
   >("sell");
 
   // Auth + profile
@@ -208,7 +214,7 @@ export default function DashboardPage() {
           PLATES_COLLECTION_ID,
           [Query.equal("seller_email", current.email)]
         );
-       
+
         const docs = (platesRes.documents ?? []) as unknown as Plate[];
 
         setAwaitingPlates(docs.filter((p) => p.status === "pending"));
@@ -254,7 +260,7 @@ export default function DashboardPage() {
     let timeout: NodeJS.Timeout | undefined;
 
     const resetTimer = () => {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       timeout = setTimeout(async () => {
         try {
           await account.deleteSession("current");
@@ -271,7 +277,7 @@ export default function DashboardPage() {
     resetTimer();
 
     return () => {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       events.forEach((e) => window.removeEventListener(e, resetTimer));
     };
   }, [router]);
@@ -396,39 +402,36 @@ export default function DashboardPage() {
   // SELL FORM HANDLING
   // --------------------------------------------------------
   const handleSellChange = (
-  e: React.ChangeEvent<
-    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-  >
-) => {
-  const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-  const { name, value, type } = target;
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
+    const target = e.target as
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | HTMLSelectElement;
+    const { name, value, type } = target;
 
-  let val: any;
+    let val: any;
 
-  if (type === "checkbox") {
-    // Only inputs can be checkboxes
-    val = (target as HTMLInputElement).checked;
-  } else if (type === "number") {
-    // Convert numeric inputs to numbers, keep empty string as empty
-    val = value === "" ? "" : Number(value);
-  } else {
-    val = value;
-  }
+    if (type === "checkbox") {
+      val = (target as HTMLInputElement).checked;
+    } else if (type === "number") {
+      val = value === "" ? "" : Number(value);
+    } else {
+      val = value;
+    }
 
-  setFormData((prev) => ({
-    ...prev,
-    [name]: val,
-  }));
-};
-
-    // Format registration spacing
     if (name === "registration") {
       let reg = value.replace(/\s+/g, "").toUpperCase();
       if (reg.length > 4) reg = reg.slice(0, 4) + " " + reg.slice(4);
       val = reg;
     }
 
-    setSellForm((prev) => ({ ...prev, [name]: val }));
+    setSellForm((prev) => ({
+      ...prev,
+      [name]: val,
+    }));
     setSellError("");
 
     if (name === "reserve_price") {
@@ -450,196 +453,196 @@ export default function DashboardPage() {
   };
 
   // --------------------------------------------------------
-// SELL SUBMIT
-// --------------------------------------------------------
-const handleSellSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setSellError("");
+  // SELL SUBMIT
+  // --------------------------------------------------------
+  const handleSellSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSellError("");
 
-  if (!user) {
-    setSellError("Your session has expired. Please log in again.");
-    router.push("/login");
-    return;
-  }
-
-  if (!sellForm.registration.trim()) {
-    setSellError("Registration is required.");
-    return;
-  }
-  if (!sellForm.plate_type) {
-    setSellError("Please select a plate type.");
-    return;
-  }
-  if (
-    sellForm.plate_type === "retention" &&
-    (!sellForm.expiry_date || !validateRetentionDate(sellForm.expiry_date))
-  ) {
-    setSellError("Retention expiry date must be a valid future date.");
-    return;
-  }
-  if (!sellForm.owner_confirmed) {
-    setSellError("You must confirm you are the legal owner.");
-    return;
-  }
-  if (!sellForm.agreed_terms) {
-    setSellError("You must agree to the Terms & Conditions.");
-    return;
-  }
-
-  const reserve = parseFloat(sellForm.reserve_price);
-const starting = sellForm.starting_price
-  ? parseFloat(sellForm.starting_price)
-  : 0;
-const buyNow = sellForm.buy_now ? parseFloat(sellForm.buy_now) : 0;
-
-// 🔒 Enforce minimum reserve price of £300
-if (isNaN(reserve) || reserve < 300) {
-  setSellError("Minimum reserve price is £300.");
-  return;
-}
-
-  if (!isNaN(starting) && starting > 0 && starting >= reserve) {
-    setSellError("Starting price must be lower than the reserve price.");
-    return;
-  }
-
-  if (!isNaN(buyNow) && buyNow > 0) {
-    const minBuyNow = Math.max(
-      reserve,
-      !isNaN(starting) && starting > 0 ? starting : 0
-    );
-    if (buyNow < minBuyNow) {
-      setSellError(
-        "Buy Now price cannot be lower than your reserve price or starting price."
-      );
-      return;
-    }
-  }
-
-  setSellSubmitting(true);
-
-  try {
-    // 🔹 Normalise registration
-    const normalizedReg = sellForm.registration.replace(/\s+/g, "").toUpperCase();
-
-    // 🔹 DUPLICATE CHECK
-    const existingRes = await databases.listDocuments(
-      process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
-      process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
-      [
-        Query.equal("seller_email", user.email),
-        Query.equal("registration", normalizedReg),
-      ]
-    );
-
-    const hasActiveDuplicate = existingRes.documents.some(
-      (doc: any) =>
-        doc.status === "pending" ||
-        doc.status === "queued" ||
-        doc.status === "live"
-    );
-
-    if (hasActiveDuplicate) {
-      setSellError(
-        "You already have an active listing for this registration. Please wait for the current listing to complete."
-      );
-      setSellSubmitting(false);
+    if (!user) {
+      setSellError("Your session has expired. Please log in again.");
+      router.push("/login");
       return;
     }
 
-    // 🔹 CREATE LISTING
-    const created = await databases.createDocument(
-      process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
-      process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
-      ID.unique(),
-      {
-        registration: normalizedReg,
-        plate_type: sellForm.plate_type,
-        expiry_date: sellForm.expiry_date || null,
-        description: sellForm.description || "",
-        reserve_price: reserve,
-        starting_price: !isNaN(starting) ? starting : 0,
-        buy_now: !isNaN(buyNow) ? buyNow : 0,
-        listing_fee: listingFee,
-        commission_rate: commissionRate,
-        expected_return: Math.round(Number(expectedReturn)),
-        owner_confirmed: sellForm.owner_confirmed,
-        agreed_terms: sellForm.agreed_terms,
-        status: "pending",
-        seller_email: user.email,
-        created_at: new Date().toISOString(),
+    if (!sellForm.registration.trim()) {
+      setSellError("Registration is required.");
+      return;
+    }
+    if (!sellForm.plate_type) {
+      setSellError("Please select a plate type.");
+      return;
+    }
+    if (
+      sellForm.plate_type === "retention" &&
+      (!sellForm.expiry_date || !validateRetentionDate(sellForm.expiry_date))
+    ) {
+      setSellError("Retention expiry date must be a valid future date.");
+      return;
+    }
+    if (!sellForm.owner_confirmed) {
+      setSellError("You must confirm you are the legal owner.");
+      return;
+    }
+    if (!sellForm.agreed_terms) {
+      setSellError("You must agree to the Terms & Conditions.");
+      return;
+    }
+
+    const reserve = parseFloat(sellForm.reserve_price as any);
+    const starting = sellForm.starting_price
+      ? parseFloat(sellForm.starting_price as any)
+      : 0;
+    const buyNow = sellForm.buy_now ? parseFloat(sellForm.buy_now as any) : 0;
+
+    // 🔒 Enforce minimum reserve price of £300
+    if (isNaN(reserve) || reserve < 300) {
+      setSellError("Minimum reserve price is £300.");
+      return;
+    }
+
+    if (!isNaN(starting) && starting > 0 && starting >= reserve) {
+      setSellError("Starting price must be lower than the reserve price.");
+      return;
+    }
+
+    if (!isNaN(buyNow) && buyNow > 0) {
+      const minBuyNow = Math.max(
+        reserve,
+        !isNaN(starting) && starting > 0 ? starting : 0
+      );
+      if (buyNow < minBuyNow) {
+        setSellError(
+          "Buy Now price cannot be lower than your reserve price or starting price."
+        );
+        return;
       }
-    );
+    }
 
-    // 🔔 NOTIFY ADMIN + SELLER
+    setSellSubmitting(true);
+
     try {
-      const notifyRes = await fetch("/api/admin/new-listing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plateId: created.$id,
+      // 🔹 Normalise registration
+      const normalizedReg = sellForm.registration.replace(/\s+/g, "").toUpperCase();
+
+      // 🔹 DUPLICATE CHECK
+      const existingRes = await databases.listDocuments(
+        process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
+        process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
+        [
+          Query.equal("seller_email", user.email),
+          Query.equal("registration", normalizedReg),
+        ]
+      );
+
+      const hasActiveDuplicate = existingRes.documents.some(
+        (doc: any) =>
+          doc.status === "pending" ||
+          doc.status === "queued" ||
+          doc.status === "live"
+      );
+
+      if (hasActiveDuplicate) {
+        setSellError(
+          "You already have an active listing for this registration. Please wait for the current listing to complete."
+        );
+        setSellSubmitting(false);
+        return;
+      }
+
+      // 🔹 CREATE LISTING
+      const created = await databases.createDocument(
+        process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
+        process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
+        ID.unique(),
+        {
           registration: normalizedReg,
-          sellerEmail: user.email,
+          plate_type: sellForm.plate_type,
+          expiry_date: sellForm.expiry_date || null,
+          description: sellForm.description || "",
           reserve_price: reserve,
           starting_price: !isNaN(starting) ? starting : 0,
           buy_now: !isNaN(buyNow) ? buyNow : 0,
-        }),
+          listing_fee: listingFee,
+          commission_rate: commissionRate,
+          expected_return: Math.round(Number(expectedReturn)),
+          owner_confirmed: sellForm.owner_confirmed,
+          agreed_terms: sellForm.agreed_terms,
+          status: "pending",
+          seller_email: user.email,
+          created_at: new Date().toISOString(),
+        }
+      );
+
+      // 🔔 NOTIFY ADMIN + SELLER
+      try {
+        const notifyRes = await fetch("/api/admin/new-listing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            plateId: created.$id,
+            registration: normalizedReg,
+            sellerEmail: user.email,
+            reserve_price: reserve,
+            starting_price: !isNaN(starting) ? starting : 0,
+            buy_now: !isNaN(buyNow) ? buyNow : 0,
+          }),
+        });
+
+        if (!notifyRes.ok) {
+          const text = await notifyRes.text();
+          console.error(
+            "❌ /api/admin/new-listing failed:",
+            notifyRes.status,
+            notifyRes.statusText,
+            text
+          );
+        } else {
+          console.log("✅ /api/admin/new-listing succeeded");
+        }
+      } catch (notifyErr) {
+        console.error("Failed to notify admin about new listing:", notifyErr);
+        // don't block user if email fails
+      }
+
+      // 🔄 Refresh seller’s plates
+      const platesRes = await databases.listDocuments(
+        process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
+        process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
+        [Query.equal("seller_email", user.email)]
+      );
+
+      const docs = platesRes.documents as unknown as Plate[];
+      setAwaitingPlates(docs.filter((p) => p.status === "pending"));
+      setApprovedPlates(docs.filter((p) => p.status === "queued"));
+      setLivePlates(docs.filter((p) => p.status === "live"));
+      setPlates(docs);
+
+      alert("Listing submitted! Awaiting approval.");
+
+      // reset form + fee state
+      setSellForm({
+        registration: "",
+        plate_type: "",
+        expiry_date: "",
+        description: "",
+        reserve_price: "",
+        starting_price: "",
+        buy_now: "",
+        owner_confirmed: false,
+        agreed_terms: false,
       });
 
-      if (!notifyRes.ok) {
-        const text = await notifyRes.text();
-        console.error(
-          "❌ /api/admin/new-listing failed:",
-          notifyRes.status,
-          notifyRes.statusText,
-          text
-        );
-      } else {
-        console.log("✅ /api/admin/new-listing succeeded");
-      }
-    } catch (notifyErr) {
-      console.error("Failed to notify admin about new listing:", notifyErr);
-      // don't block user if email fails
+      setListingFee(0);
+      setCommissionRate(0);
+      setExpectedReturn(0);
+    } catch (err: any) {
+      console.error("Create listing error:", err);
+      setSellError("Failed to create listing. Please try again.");
+    } finally {
+      setSellSubmitting(false);
     }
-
-    // 🔄 Refresh seller’s plates
-    const platesRes = await databases.listDocuments(
-      process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
-      process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
-      [Query.equal("seller_email", user.email)]
-    );
-
-    const docs = platesRes.documents as unknown as Plate[];
-    setAwaitingPlates(docs.filter((p) => p.status === "pending"));
-    setApprovedPlates(docs.filter((p) => p.status === "queued"));
-    setLivePlates(docs.filter((p) => p.status === "live"));
-    setPlates(docs);
-
-    alert("Listing submitted! Awaiting approval.");
-
-    // reset form + fee state
-    setSellForm({
-      registration: "",
-      plate_type: "",
-      expiry_date: "",
-      description: "",
-      reserve_price: "",
-      starting_price: "",
-      buy_now: "",
-      owner_confirmed: false,
-      agreed_terms: false,
-    });
-
-    setListingFee(0);
-    setCommissionRate(0);
-    setExpectedReturn(0);
-  } catch (err: any) {
-    console.error("Create listing error:", err);
-    setSellError("Failed to create listing. Please try again.");
-  } finally {
-    setSellSubmitting(false);
-  }
-};
+  };
 
   // --------------------------------------------------------
   // LOADING STATE
@@ -984,16 +987,16 @@ if (isNaN(reserve) || reserve < 300) {
                     sold.
                   </div>
 
-                 <input
-  type="number"
-  name="reserve_price"
-  value={sellForm.reserve_price}
-  onChange={handleSellChange}
-  className="border rounded-md w-full px-3 py-2 text-sm"
-  min={300} // 👈 browser guard
-  step="0.01"
-  placeholder="Minimum reserve £300"
-/>
+                  <input
+                    type="number"
+                    name="reserve_price"
+                    value={sellForm.reserve_price}
+                    onChange={handleSellChange}
+                    className="border rounded-md w-full px-3 py-2 text-sm"
+                    min={300}
+                    step="0.01"
+                    placeholder="Minimum reserve £300"
+                  />
                 </div>
 
                 {/* STARTING PRICE */}
@@ -1046,8 +1049,7 @@ if (isNaN(reserve) || reserve < 300) {
                 {/* SUMMARY BOX */}
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700">
                   <p>
-                    Listing fee:{" "}
-                    <strong>£{listingFee.toFixed(2)}</strong>
+                    Listing fee: <strong>£{listingFee.toFixed(2)}</strong>
                   </p>
                   <p>
                     Commission:{" "}
@@ -1235,8 +1237,8 @@ if (isNaN(reserve) || reserve < 300) {
 
                       <div className="mt-2">
                         <AdminAuctionTimer
-                          start={p.auction_start}
-                          end={p.auction_end}
+                          start={p.auction_start ?? null}
+                          end={p.auction_end ?? null}
                           status="queued"
                         />
                       </div>
@@ -1480,7 +1482,12 @@ if (isNaN(reserve) || reserve < 300) {
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-4">
                           {/* Plate visual */}
-                          <NumberPlate registration={regText} />
+                          <NumberPlate
+  reg={regText}
+  size="card"
+  variant="rear"
+  showBlueBand={true}
+/>
 
                           {/* Text details */}
                           <div>
@@ -1547,9 +1554,10 @@ if (isNaN(reserve) || reserve < 300) {
                             them before processing your payout.
                           </p>
                           <SellerDocumentsUploader
-                            transactionId={tx.$id}
-                            existingDocuments={tx.documents || []}
-                          />
+  sellerId={profile?.$id ?? ""}
+  transactionId={tx.$id}
+  existingDocuments={tx.documents || []}
+/>
                         </div>
                       )}
                     </div>

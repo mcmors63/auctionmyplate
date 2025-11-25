@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 
 type SellerDocumentsUploaderProps = {
   sellerId: string;
-  transactionId: string | null;
+  transactionId?: string | null;
   /**
    * Optional list of existing document IDs (from the transaction row).
    * This is just for display so the seller can see that files are on record.
    */
-  existingDocuments?: string[];
+  existingDocuments?: any[];
 };
 
 const DOCUMENT_TYPES = [
@@ -186,8 +187,8 @@ export default function SellerDocumentsUploader({
             Documents already on file:
           </p>
           <ul className="text-xs text-gray-600 list-disc pl-4 space-y-1">
-            {existingDocuments.map((id) => (
-              <li key={id}>File ID: {id}</li>
+            {existingDocuments.map((doc, index) => (
+              <li key={index}>File ID: {String(doc)}</li>
             ))}
           </ul>
           <p className="text-[11px] text-gray-400 mt-1">

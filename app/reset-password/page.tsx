@@ -55,7 +55,7 @@ export default function ResetPasswordPage() {
     try {
       setLoading(true);
 
-      await account.updateRecovery(uid!, secret!, password, confirm);
+      await account.updateRecovery(uid!, secret!, password);
       setStatus("success");
       setMessage("Password reset successfully.");
     } catch (err: any) {

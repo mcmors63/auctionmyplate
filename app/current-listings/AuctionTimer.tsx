@@ -6,9 +6,11 @@ import { getAuctionWindow } from "@/lib/getAuctionWindow";
 
 type Props = {
   mode: "coming" | "live";
+  /** Optional per-listing end time (ISO string). Used on place_bid page. */
+  endTime?: string | null;
 };
 
-export default function AuctionTimer({ mode }: Props) {
+export default function AuctionTimer({ mode, endTime }: Props) {
   const [now, setNow] = useState(Date.now());
 
   // Tick every second
@@ -17,13 +19,16 @@ export default function AuctionTimer({ mode }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  // Compute target + label ONCE per render (no useState, no loops)
+  // Compute target + label ONCE per render
   const { target, label } = useMemo(() => {
     const { currentStart, currentEnd, nextStart, now: windowNow } =
       getAuctionWindow();
 
     const nowTime = windowNow.getTime();
 
+    // -------------------------
+    // COMING MODE – unchanged
+    // -------------------------
     if (mode === "coming") {
       // If we haven't reached currentStart yet → count to currentStart
       if (nowTime < currentStart.getTime()) {
@@ -40,12 +45,26 @@ export default function AuctionTimer({ mode }: Props) {
       };
     }
 
-    // LIVE mode → countdown to currentEnd
+    // -------------------------
+    // LIVE MODE
+    // -------------------------
+    // If a per-listing endTime is supplied (place_bid page), use that
+    if (endTime) {
+      const parsed = new Date(endTime);
+      if (!isNaN(parsed.getTime())) {
+        return {
+          target: parsed,
+          label: "Auction ends in",
+        };
+      }
+    }
+
+    // Fallback: use weekly auction window end (old behaviour)
     return {
       target: currentEnd,
       label: "Auction ends in",
     };
-  }, [mode]);
+  }, [mode, endTime]);
 
   if (!target) return null;
 

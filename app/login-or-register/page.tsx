@@ -1,36 +1,45 @@
-"use client";
+// app/login-or-register/page.tsx
+import Link from "next/link";
 
-import { useRouter, useSearchParams } from "next/navigation";
+export const metadata = {
+  title: "Login or Register | AuctionMyPlate",
+  description: "Login or create an account to bid or sell plates.",
+};
 
 export default function LoginOrRegisterPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const id = searchParams.get("id");
-
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#faf7f2] p-6">
-      <div className="bg-white shadow-lg rounded-xl p-8 max-w-md w-full text-center">
-        <h1 className="text-2xl font-bold text-yellow-600 mb-4">
-          Login or Register to Bid
+    <main className="min-h-screen bg-[#FFFBEA] flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-yellow-100 p-6 text-center space-y-4">
+        <h1 className="text-2xl font-extrabold text-yellow-700">
+          You need an account
         </h1>
-        <p className="text-gray-700 mb-6">
-          You need to be signed in to place a bid on this registration.
+
+        <p className="text-sm text-gray-600">
+          To <strong>bid</strong> or <strong>sell a plate</strong>, you must be
+          logged in to your AuctionMyPlate account.
         </p>
-        <div className="flex justify-around">
-          <button
-            onClick={() => router.push(`/login?id=${id}`)}
-            className="bg-black text-yellow-400 px-5 py-2 rounded-md hover:bg-gray-800 transition"
+
+        <div className="flex flex-col gap-3 mt-4">
+          <Link
+            href="/login"
+            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 rounded-md text-sm"
           >
             Login
-          </button>
-          <button
-            onClick={() => router.push(`/register?id=${id}`)}
-            className="bg-yellow-500 text-black px-5 py-2 rounded-md hover:bg-yellow-400 transition"
+          </Link>
+
+          <Link
+            href="/register"
+            className="w-full border border-yellow-500 text-yellow-700 hover:bg-yellow-50 font-semibold py-2 rounded-md text-sm"
           >
-            Register
-          </button>
+            Register as a new seller
+          </Link>
         </div>
+
+        <p className="mt-4 text-xs text-gray-500">
+          Once logged in, you can access your{" "}
+          <strong>Seller Dashboard</strong>, list plates, and place bids.
+        </p>
       </div>
-    </div>
+    </main>
   );
 }

@@ -1,16 +1,15 @@
 // app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 // ✅ Existing imports
 import Navbar from "@/components/ui/Navbar";
-// ⬇️ Use the path that matches your file name:
-// If your file is Footer.tsx → "@/components/ui/Footer"
-// If it's footer.tsx → "@/components/ui/footer"
+// ⬇️ Make sure this path matches your actual file name & case
 import Footer from "@/components/ui/footer";
 import AutoLogout from "@/components/ui/AutoLogout";
 
-// ✅ New: cookie banner
+// ✅ Cookie banner
 import CookieBanner from "@/components/ui/CookieBanner";
 
 export const metadata: Metadata = {
@@ -31,7 +30,11 @@ export default function RootLayout({
 
         <AutoLogout />
 
-        <main className="flex-grow">{children}</main>
+        <main className="flex-grow">
+          <Suspense fallback={null}>
+            {children}
+          </Suspense>
+        </main>
 
         <Footer />
 

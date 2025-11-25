@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 type PlatePreviewStaticProps = {
   registration: string;
   width?: number;
@@ -11,10 +13,6 @@ export default function PlatePreviewStatic({
   width = 300,
   height = 70,
 }: PlatePreviewStaticProps) {
-  const text = (registration || "").toUpperCase();
-
-  if (!text) return null;
-
   return (
     <div
       className="flex items-center justify-center relative"
@@ -33,7 +31,7 @@ export default function PlatePreviewStatic({
         textTransform: "uppercase",
       }}
     >
-      {/* Left GB strip */}
+      {/* Optional left GB strip (static, decorative) */}
       <div
         style={{
           position: "absolute",
@@ -53,7 +51,9 @@ export default function PlatePreviewStatic({
         GB
       </div>
 
-      <span style={{ marginLeft: `${width * 0.22}px` }}>{text}</span>
+      <span style={{ marginLeft: `${width * 0.22}px` }}>
+        {registration || ""}
+      </span>
     </div>
   );
 }

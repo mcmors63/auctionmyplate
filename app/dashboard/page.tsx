@@ -396,12 +396,30 @@ export default function DashboardPage() {
   // SELL FORM HANDLING
   // --------------------------------------------------------
   const handleSellChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
-  ) => {
-    const { name, value, type, checked } = e.target;
-    let val: any = type === "checkbox" ? checked : value;
+  e: React.ChangeEvent<
+    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  >
+) => {
+  const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  const { name, value, type } = target;
+
+  let val: any;
+
+  if (type === "checkbox") {
+    // Only inputs can be checkboxes
+    val = (target as HTMLInputElement).checked;
+  } else if (type === "number") {
+    // Convert numeric inputs to numbers, keep empty string as empty
+    val = value === "" ? "" : Number(value);
+  } else {
+    val = value;
+  }
+
+  setFormData((prev) => ({
+    ...prev,
+    [name]: val,
+  }));
+};
 
     // Format registration spacing
     if (name === "registration") {

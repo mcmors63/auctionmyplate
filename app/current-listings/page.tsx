@@ -1,165 +1,187 @@
 "use client";
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+
+import { useEffect, useState, useMemo } from "react";
+import ListingCard from "./ListingCard";
+import { Client, Databases, Query } from "appwrite";
+
+const client = new Client()
+  .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
+  .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
+
+const databases = new Databases(client);
+
+const DB_ID = process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!;
+const COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!;
 
 export default function CurrentListingsPage() {
-  const [listings, setListings] = useState<any[]>([]);
+  const [tab, setTab] = useState<"live" | "soon">("live");
+  const [live, setLive] = useState<any[]>([]);
+  const [soon, setSoon] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchListings = async () => {
-      const { data, error } = await supabase
-        .from("listings")
-        .select("*")
-        .eq("approved", true);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("ending");
 
-      if (!error) setListings(data || []);
-      setLoading(false);
+  // ------------------------------------------------------------
+  // LOAD LISTINGS
+  // ------------------------------------------------------------
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+
+        const liveRes = await databases.listDocuments(DB_ID, COLLECTION_ID, [
+          Query.equal("status", "live"),
+        ]);
+
+        const soonRes = await databases.listDocuments(DB_ID, COLLECTION_ID, [
+          Query.equal("status", "queued"),
+        ]);
+
+        setLive(liveRes.documents);
+        setSoon(soonRes.documents);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    fetchListings();
+    load();
   }, []);
 
-  if (loading) return <p className="p-6">Loading listings...</p>;
+  // ------------------------------------------------------------
+  // FILTER + SORT
+  // ------------------------------------------------------------
+  const filtered = useMemo(() => {
+    const source = tab === "live" ? live : soon;
+    let results = [...source];
 
-  return (
-    <div className="max-w-6xl mx-auto px-6 py-12">
-      <h1 className="text-3xl font-bold mb-6">Current Listings</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {listings.map((item) => (
-          <ListingCard key={item.id} item={item} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------
-// ListingCard component (handles timer and bidding)
-// ---------------------------------------------------------------
-function ListingCard({ item }: { item: any }) {
-  const [timeLeft, setTimeLeft] = useState<string>("");
-
-  // Countdown Timer
-  useEffect(() => {
-    if (!item.auction_end) return;
-
-    const timer = setInterval(() => {
-      const auctionEnd = new Date(item.auction_end).getTime();
-      const now = Date.now();
-      const diff = auctionEnd - now;
-
-      if (diff <= 0) {
-        setTimeLeft("Auction ended");
-        clearInterval(timer);
-        return;
-      }
-
-      const totalSeconds = Math.floor(diff / 1000);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-
-      const formatted = `${hours.toString().padStart(2, "0")}:${minutes
-        .toString()
-        .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-
-      setTimeLeft(formatted);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [item.auction_end]);
-
-  // Place Bid Handler
-  const handleBid = async () => {
-    const bid = prompt("Enter your bid amount (£):");
-    if (!bid) return;
-
-    try {
-      const res = await fetch("/api/place-bid", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          listing_id: item.id,
-          bid_amount: parseFloat(bid),
-          user_id: "demo-user", // temp until login system connects
-        }),
-      });
-
-      const data = await res.json();
-      console.log("API Response:", data);
-
-      if (!res.ok) {
-        alert("Error: " + data.error);
-      } else {
-        alert("✅ Bid placed successfully!");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error placing bid. Check console for details.");
+    if (search.trim() !== "") {
+      results = results.filter((l) =>
+        l.registration?.toLowerCase().includes(search.toLowerCase())
+      );
     }
-  };
 
-  // Render listing card
+    if (sort === "ending") {
+      results.sort((a, b) => {
+        const aTime = new Date(a.auction_end ?? a.auction_start).getTime();
+        const bTime = new Date(b.auction_end ?? b.auction_start).getTime();
+        return aTime - bTime;
+      });
+    }
+
+    if (sort === "newest") {
+      results.sort(
+        (a, b) =>
+          new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime()
+      );
+    }
+
+    if (sort === "az") {
+      results.sort((a, b) =>
+        (a.registration || "").localeCompare(b.registration || "")
+      );
+    }
+
+    if (sort === "priceLow") {
+      results.sort((a, b) => (a.current_bid || 0) - (b.current_bid || 0));
+    }
+
+    if (sort === "priceHigh") {
+      results.sort((a, b) => (b.current_bid || 0) - (a.current_bid || 0));
+    }
+
+    return results;
+  }, [tab, live, soon, search, sort]);
+
+  // ------------------------------------------------------------
+  // RETURN JSX
+  // ------------------------------------------------------------
   return (
-    <div className="border rounded-xl shadow-md overflow-hidden bg-white">
-      {/* Plate Display */}
-      <div className="relative bg-gray-100 p-6 flex justify-center">
-        <div
-          className="w-full max-w-[280px] h-[70px] flex items-center justify-center font-bold text-3xl"
-          style={{
-            backgroundColor: "#FFD300",
-            color: "#000",
-            borderRadius: "6px",
-            fontFamily: "'Charles Wright', 'Arial Black', sans-serif",
-            border: "4px solid #000",
-            letterSpacing: "4px",
-          }}
-        >
-          {item.reg_number}
-        </div>
+    <main className="min-h-screen bg-[#F5F5F5] text-gray-900">
+
+      {/* DVLA HEADER BAR */}
+      <div className="w-full bg-yellow-300 border-b-4 border-black py-4 text-center">
+        <h2 className="text-xl font-extrabold text-black tracking-wide uppercase"></h2>
       </div>
 
-      {/* Info Section */}
-      <div className="p-4">
-        <p className="text-gray-700">
-          Starting Price:{" "}
-          <span className="font-semibold text-black">£{item.starting_price}</span>
-        </p>
-        <p className="text-gray-700">Reserve Price: £{item.reserve_price}</p>
-        <p>Status: {item.plate_status}</p>
-        {item.plate_status === "certificate" && (
-          <p>Expiry: {item.expiry_date}</p>
-        )}
+      <div className="px-6 py-12">
+        
+        {/* PAGE TITLE */}
+        <h1 className="text-center text-4xl font-extrabold text-black mb-10 tracking-tight">
+          Current Listings
+        </h1>
 
-        {/* Countdown */}
-        {item.auction_end && (
-          <p
-            className={`mt-3 text-lg font-semibold ${
-              timeLeft === "Auction ended"
-                ? "text-gray-500"
-                : timeLeft < "00:10:00"
-                ? "text-red-600"
-                : "text-black"
+        {/* TABS */}
+        <div className="max-w-xl mx-auto flex justify-center gap-4 mb-8">
+          <button
+            onClick={() => setTab("live")}
+            className={`px-6 py-3 rounded-lg font-bold transition border ${
+              tab === "live"
+                ? "bg-black text-white border-black shadow-md"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
             }`}
           >
-            Time left: {timeLeft}
-          </p>
-        )}
+            Live
+          </button>
 
-        {/* Place Bid Button */}
-        <div className="mt-4">
           <button
-            onClick={handleBid}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+            onClick={() => setTab("soon")}
+            className={`px-6 py-3 rounded-lg font-bold transition border ${
+              tab === "soon"
+                ? "bg-black text-white border-black shadow-md"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+            }`}
           >
-            Place Bid
+            Queued
           </button>
         </div>
+
+        {/* FILTER BAR */}
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 bg-white border border-gray-300 p-4 rounded-xl shadow-sm mb-10">
+          
+          <input
+            type="text"
+            placeholder="Search registration…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full md:w-1/3 px-4 py-2 rounded-lg bg-white border border-gray-400 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-black"
+          />
+
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="w-full md:w-1/4 px-4 py-2 rounded-lg bg-white border border-gray-400 text-gray-900 focus:outline-none focus:border-black"
+          >
+            <option value="ending">Ending Soon</option>
+            <option value="newest">Newest</option>
+            <option value="az">A → Z</option>
+            <option value="priceLow">Price (Low → High)</option>
+            <option value="priceHigh">Price (High → Low)</option>
+          </select>
+        </div>
+
+        {/* GRID */}
+        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {loading && (
+            <p className="col-span-full text-center text-gray-500">Loading…</p>
+          )}
+
+          {!loading &&
+            filtered
+              .filter((l) => l && typeof l === "object" && l.$id)
+              .map((listing) => (
+                <ListingCard key={listing.$id} listing={listing} />
+              ))}
+
+          {!loading &&
+            filtered.filter((l) => l && l.$id).length === 0 && (
+              <p className="col-span-full text-center text-gray-600">
+                No listings match your filters.
+              </p>
+            )}
+        </div>
+
       </div>
-    </div>
+    </main>
   );
 }
-import AuctionTimer from './AuctionTimer';
-
-<AuctionTimer endTime="2025-11-02T23:59:00Z" />

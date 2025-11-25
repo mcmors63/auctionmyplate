@@ -1,92 +1,146 @@
-export default function Home() {
+// app/page.tsx
+
+// app/page.tsx
+
+export const metadata = {
+  title: "Auction Your Private Number Plate | AuctionMyPlate",
+  description:
+    "Auction your private or cherished number plate with AuctionMyPlate. Weekly UK plate auctions, hidden reserves, secure DVLA transfer and no listing fee. Start selling your reg today.",
+};
+
+import Link from "next/link";
+
+export default function HomePage() {
   return (
-    <main className="flex flex-col min-h-screen text-gray-800 relative">
-      {/* Background wallpaper */}
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-fixed"
-        style={{
-          backgroundImage: "url('/plates-wallpaper.png')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      ></div>
+    <main className="min-h-screen bg-black text-gray-200">
+      {/* HERO SECTION */}
+      <section className="relative h-[480px] w-full overflow-hidden">
+        <img
+          src="https://images.unsplash.com/photo-1502877338535-766e1452684a?q=80&w=2400"
+          alt="Luxury car hero"
+          className="absolute inset-0 h-full w-full object-cover opacity-60"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 to-black/95" />
 
-      {/* Light transparent overlay for readability */}
-      <div className="absolute inset-0 bg-yellow-50/70 backdrop-blur-sm"></div>
+        <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6">
+          <h1 className="text-5xl sm:text-6xl font-extrabold text-gold mb-6 tracking-tight">
+            It&apos;s Free To List Your Number Plate
+          </h1>
 
-      {/* Header */}
-      <header className="relative z-10 w-full bg-black text-yellow-400 shadow-md fixed top-0 left-0">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold tracking-widest">AUCTION MY PLATE</h1>
-          <nav className="space-x-6 text-yellow-300 font-medium">
-            <a href="#" className="hover:text-white">
-              Home
-            </a>
-            <a href="#" className="hover:text-white">
-              Auctions
-            </a>
-            <a href="#" className="hover:text-white">
-              Sell a Plate
-            </a>
-            <a href="#" className="hover:text-white">
-              Contact
-            </a>
-          </nav>
+          <p className="text-xl max-w-2xl text-gray-300 mb-8 leading-relaxed">
+            Weekly DVLA-style auctions run from{" "}
+            <span className="text-gold font-semibold">Monday 01:00</span> to{" "}
+            <span className="text-gold font-semibold">Sunday 23:00</span>.  
+            Bid on cherished plates or sell yours for the best price.
+          </p>
+
+          <div className="flex flex-wrap gap-4 justify-center">
+            <Link
+              href="/current-listings"
+              className="bg-gold text-black font-semibold px-6 py-3 rounded-xl hover:bg-yellow-500 transition shadow-lg"
+            >
+              View Current Auctions
+            </Link>
+
+            {/* Always send here so new users can log in or register first */}
+            <Link
+              href="/login-or-register"
+              className="border border-gold text-gold font-semibold px-6 py-3 rounded-xl hover:bg-gold hover:text-black transition shadow-lg"
+            >
+              List Your Plate
+            </Link>
+          </div>
         </div>
-      </header>
+      </section>
 
-      {/* Hero Section */}
-      <section className="relative z-10 flex flex-col items-center justify-center flex-grow pt-32 pb-20 px-6 text-black text-center">
-        <div className="bg-yellow-400/90 p-10 rounded-lg shadow-lg border-4 border-black inline-block mb-8">
-          <h2 className="text-4xl md:text-5xl font-bold tracking-widest">
-            BUY & SELL CHERISHED PLATES
+      {/* VALUE GRID */}
+      <section className="max-w-6xl mx-auto py-20 px-6">
+        <div className="grid md:grid-cols-3 gap-10">
+          {/* SELL */}
+          <div className="bg-black/40 p-8 rounded-2xl border border-gold/20 shadow-xl text-center">
+            <div className="text-4xl mb-4">💷</div>
+            <h3 className="text-2xl font-bold text-gold mb-3">SELL</h3>
+            <p className="text-gray-400">
+              Listing your plate is completely free.  
+              Fast approvals and maximum exposure to serious buyers.
+            </p>
+          </div>
+
+          {/* SAFE */}
+          <div className="bg-black/40 p-8 rounded-2xl border border-gold/20 shadow-xl text-center">
+            <div className="text-4xl mb-4">🔒</div>
+            <h3 className="text-2xl font-bold text-gold mb-3">SAFE &amp; SECURE</h3>
+            <p className="text-gray-400">
+              Verified users, transparent fees and DVLA-style transfer guidance on every sale.
+            </p>
+          </div>
+
+          {/* BUY */}
+          <div className="bg-black/40 p-8 rounded-2xl border border-gold/20 shadow-xl text-center">
+            <div className="text-4xl mb-4">🛒</div>
+            <h3 className="text-2xl font-bold text-gold mb-3">BUY</h3>
+            <p className="text-gray-400">
+              Bid in weekly auctions on unique registrations, from clever wordplay to ultra-rare plates.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section className="bg-black/60 border-t border-gold/20 border-b py-20 px-6">
+        <h2 className="text-4xl font-bold text-gold text-center mb-12">
+          How It Works
+        </h2>
+
+        <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-10">
+          <div className="bg-black/40 p-8 rounded-2xl border border-gold/20 shadow-xl text-center">
+            <div className="text-4xl font-extrabold text-gold mb-4">1</div>
+            <h3 className="text-xl font-semibold text-gray-100 mb-2">
+              List Your Plate
+            </h3>
+            <p className="text-gray-400">
+              Create an account, add your plate details and submit for approval. Listing is free.
+            </p>
+          </div>
+
+          <div className="bg-black/40 p-8 rounded-2xl border border-gold/20 shadow-xl text-center">
+            <div className="text-4xl font-extrabold text-gold mb-4">2</div>
+            <h3 className="text-xl font-semibold text-gray-100 mb-2">
+              Auction Goes Live
+            </h3>
+            <p className="text-gray-400">
+              Once approved, your plate enters the next Monday–Sunday auction window.
+            </p>
+          </div>
+
+          <div className="bg-black/40 p-8 rounded-2xl border border-gold/20 shadow-xl text-center">
+            <div className="text-4xl font-extrabold text-gold mb-4">3</div>
+            <h3 className="text-xl font-semibold text-gray-100 mb-2">
+              Secure Transfer
+            </h3>
+            <p className="text-gray-400">
+              When it sells, we guide both buyer and seller through a safe DVLA-style transfer.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* TRUST PANEL */}
+      <section className="py-20 px-6">
+        <div className="max-w-4xl mx-auto bg-black/40 p-10 rounded-2xl border border-gold/20 shadow-xl text-center">
+          <h2 className="text-3xl font-bold text-gold mb-4">
+            Why Choose AuctionMyPlate?
           </h2>
-        </div>
-        <p className="text-lg max-w-2xl mb-8 text-gray-900 font-medium bg-yellow-100/80 px-4 py-2 rounded">
-          Weekly DVLA-style auctions every Sunday to Sunday — find your perfect registration or sell yours for top value.
-        </p>
-        <div className="flex gap-4">
-          <a
-            href="#"
-            className="bg-black text-yellow-400 px-6 py-3 rounded-lg font-semibold hover:bg-gray-900 transition"
-          >
-            View Current Auctions
-          </a>
-          <a
-            href="#"
-            className="border-2 border-black px-6 py-3 rounded-lg font-semibold hover:bg-black hover:text-yellow-400 transition"
-          >
-            List Your Plate
-          </a>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="relative z-10 max-w-6xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-10 text-center">
-        <div className="bg-white/90 rounded-lg p-6 shadow-md border border-gray-200">
-          <h3 className="text-xl font-semibold mb-3 text-black">Weekly Auctions</h3>
-          <p className="text-gray-700">
-            Bidding opens every Sunday at 00:00 and ends the following Sunday at 23:59. Join the excitement all week long!
-          </p>
-        </div>
-        <div className="bg-white/90 rounded-lg p-6 shadow-md border border-gray-200">
-          <h3 className="text-xl font-semibold mb-3 text-black">Safe & Secure</h3>
-          <p className="text-gray-700">
-            All transactions are protected and verified through our trusted platform, so you can bid or sell with confidence.
-          </p>
-        </div>
-        <div className="bg-white/90 rounded-lg p-6 shadow-md border border-gray-200">
-          <h3 className="text-xl font-semibold mb-3 text-black">Simple to Use</h3>
-          <p className="text-gray-700">
-            Register, list, and start bidding within minutes. No complicated forms or hidden fees — just results.
+          <p className="text-gray-300 text-lg">
+            Built for plate lovers, collectors, traders and investors.  
+            Modern, transparent and secure — with{" "}
+            <span className="text-gold font-semibold">no listing fees</span>{" "}
+            and a weekly auction cycle designed around UK number plate buyers.
           </p>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="relative z-10 bg-black text-yellow-400 py-6 text-center">
-        <p>© {new Date().getFullYear()} Auction My Plate. All rights reserved.</p>
-      </footer>
+      <div className="h-20" />
     </main>
   );
 }

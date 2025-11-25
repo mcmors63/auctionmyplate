@@ -208,7 +208,8 @@ export default function DashboardPage() {
           PLATES_COLLECTION_ID,
           [Query.equal("seller_email", current.email)]
         );
-        const docs = platesRes.documents as Plate[];
+       
+        const docs = (platesRes.documents ?? []) as unknown as Plate[];
 
         setAwaitingPlates(docs.filter((p) => p.status === "pending"));
         setApprovedPlates(docs.filter((p) => p.status === "queued"));

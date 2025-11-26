@@ -101,6 +101,19 @@ type Transaction = {
   documents?: any[];
   created_at?: string;
   updated_at?: string;
+
+  // Seller workflow flags (set from Admin)
+  seller_docs_requested?: boolean;
+  seller_docs_received?: boolean;
+  seller_payment_transferred?: boolean;
+  seller_process_complete?: boolean;
+
+  // Buyer workflow flags (set from Admin)
+  buyer_info_requested?: boolean;
+  buyer_info_received?: boolean;
+  buyer_tax_mot_validated?: boolean;
+  buyer_payment_taken?: boolean;
+  buyer_transfer_complete?: boolean;
 };
 
 // -----------------------------
@@ -116,6 +129,8 @@ export default function DashboardPage() {
     | "awaiting"
     | "approvedQueued"
     | "live"
+    | "sold"
+    | "purchased"
     | "history"
     | "transactions"
   >("sell");
@@ -236,7 +251,28 @@ export default function DashboardPage() {
               TX_COLLECTION_ID,
               [Query.equal("seller_email", current.email)]
             );
-            setTransactions(txRes.documents as Transaction[]);
+
+            // Also fetch where you are the buyer
+            const txBuyerRes = await databases.listDocuments(
+              TX_DB_ID,
+              TX_COLLECTION_ID,
+              [Query.equal("buyer_email", current.email)]
+            );
+
+            const combined = [
+              ...(txRes.documents as Transaction[]),
+              ...(txBuyerRes.documents as Transaction[]),
+            ];
+
+            // de-duplicate by $id just in case
+            const byId = new Map<string, Transaction>();
+            combined.forEach((tx) => {
+              if (tx.$id && !byId.has(tx.$id)) {
+                byId.set(tx.$id, tx);
+              }
+            });
+
+            setTransactions(Array.from(byId.values()));
           }
         } catch (txErr) {
           console.error("Transactions load error (non-fatal):", txErr);
@@ -646,6 +682,61 @@ export default function DashboardPage() {
   };
 
   // --------------------------------------------------------
+  // DERIVED TRANSACTION VIEWS
+  // --------------------------------------------------------
+  const userEmail = user?.email ?? null;
+
+  const isFinishedTransaction = (tx: Transaction) => {
+    const tStatus = (tx.transaction_status || "").toLowerCase();
+    const pStatus = (tx.payment_status || "").toLowerCase();
+    return (
+      tStatus === "complete" ||
+      tStatus === "completed" ||
+      pStatus === "paid"
+    );
+  };
+
+  // All completed sales where YOU were the seller
+  const soldTransactions = userEmail
+    ? transactions.filter(
+        (tx) => tx.seller_email === userEmail && isFinishedTransaction(tx)
+      )
+    : [];
+
+  // All completed purchases where YOU were the buyer
+  const purchasedTransactions = userEmail
+    ? transactions.filter(
+        (tx) => tx.buyer_email === userEmail && isFinishedTransaction(tx)
+      )
+    : [];
+
+  // Active transactions (not finished yet) where you are seller or buyer
+  const activeTransactions = userEmail
+    ? transactions
+        .filter(
+          (tx) =>
+            tx.seller_email === userEmail || tx.buyer_email === userEmail
+        )
+        .filter((tx) => !isFinishedTransaction(tx))
+    : [];
+
+      const activeSales = userEmail
+    ? activeTransactions.filter((tx) => tx.seller_email === userEmail)
+    : [];
+
+  const activePurchases = userEmail
+    ? activeTransactions.filter((tx) => tx.buyer_email === userEmail)
+    : [];
+
+  // History plates (only completed auctions)
+  const historyPlates = plates.filter(
+    (p) =>
+      p.status === "sold" ||
+      p.status === "not_sold" ||
+      p.status === "completed"
+  );
+
+  // --------------------------------------------------------
   // LOADING STATE
   // --------------------------------------------------------
   if (initialLoading) {
@@ -706,6 +797,8 @@ export default function DashboardPage() {
             ["awaiting", "Awaiting Approval"],
             ["approvedQueued", "Approved / Queued"],
             ["live", "Live Listings"],
+            ["sold", "Sold"],
+            ["purchased", "Purchased"],
             ["history", "History"],
             ["transactions", "Transactions"],
           ].map(([key, label]) => {
@@ -715,6 +808,8 @@ export default function DashboardPage() {
               | "awaiting"
               | "approvedQueued"
               | "live"
+              | "sold"
+              | "purchased"
               | "history"
               | "transactions";
             const active = activeTab === k;
@@ -1161,7 +1256,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-                {/* APPROVED / QUEUED TAB */}
+        {/* APPROVED / QUEUED TAB */}
         {activeTab === "approvedQueued" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold mb-2 text-yellow-700">
@@ -1330,18 +1425,223 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* SOLD TAB */}
+        {activeTab === "sold" && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+              Sold Plates (You as Seller)
+            </h2>
+            <p className="text-sm text-gray-600 mb-2">
+              Completed sales where you were the seller. These should line up
+              with what admin sees in the Transactions screen.
+            </p>
+
+            {soldTransactions.length === 0 ? (
+              <p className="text-gray-600 text-sm text-center">
+                You don&apos;t have any completed sales yet.
+              </p>
+            ) : (
+              <div className="grid gap-4">
+                {soldTransactions.map((tx) => {
+                  const regText =
+                    (tx as any).registration ||
+                    (tx as any).plate_registration ||
+                    (tx as any).plate_id ||
+                    "UNKNOWN";
+
+                  const created =
+                    tx.created_at && !isNaN(new Date(tx.created_at).getTime())
+                      ? new Date(tx.created_at).toLocaleString("en-GB")
+                      : null;
+
+                  const updated =
+                    tx.updated_at && !isNaN(new Date(tx.updated_at).getTime())
+                      ? new Date(tx.updated_at).toLocaleString("en-GB")
+                      : null;
+
+                  return (
+                    <div
+                      key={tx.$id}
+                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-4">
+                          <NumberPlate
+                            reg={regText}
+                            size="card"
+                            variant="rear"
+                            showBlueBand={true}
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {regText}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Buyer: {tx.buyer_email || "Unknown"}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Transaction ID: {tx.$id}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700">
+                          COMPLETED
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                        <p>
+                          <strong>Sale price:</strong> £
+                          {(tx.sale_price ?? 0).toFixed(2)}
+                        </p>
+                        <p>
+                          <strong>Commission:</strong> £
+                          {(tx.commission_amount ?? 0).toFixed(2)} (
+                          {tx.commission_rate ?? 0}%)
+                        </p>
+                        <p>
+                          <strong>Seller payout:</strong> £
+                          {(tx.seller_payout ?? 0).toFixed(2)}
+                        </p>
+                        <p>
+                          <strong>DVLA fee:</strong> £
+                          {(tx.dvla_fee ?? 0).toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                        <p>
+                          <strong>Created:</strong>{" "}
+                          {created || "Not recorded"}
+                        </p>
+                        <p>
+                          <strong>Last updated:</strong>{" "}
+                          {updated || "Not recorded"}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PURCHASED TAB */}
+        {activeTab === "purchased" && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+              Purchased Plates (You as Buyer)
+            </h2>
+            <p className="text-sm text-gray-600 mb-2">
+              Completed purchases where you were the buyer.
+            </p>
+
+            {purchasedTransactions.length === 0 ? (
+              <p className="text-gray-600 text-sm text-center">
+                You haven&apos;t completed any purchases yet.
+              </p>
+            ) : (
+              <div className="grid gap-4">
+                {purchasedTransactions.map((tx) => {
+                  const regText =
+                    (tx as any).registration ||
+                    (tx as any).plate_registration ||
+                    (tx as any).plate_id ||
+                    "UNKNOWN";
+
+                  const created =
+                    tx.created_at && !isNaN(new Date(tx.created_at).getTime())
+                      ? new Date(tx.created_at).toLocaleString("en-GB")
+                      : null;
+
+                  const updated =
+                    tx.updated_at && !isNaN(new Date(tx.updated_at).getTime())
+                      ? new Date(tx.updated_at).toLocaleString("en-GB")
+                      : null;
+
+                  return (
+                    <div
+                      key={tx.$id}
+                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-4">
+                          <NumberPlate
+                            reg={regText}
+                            size="card"
+                            variant="rear"
+                            showBlueBand={true}
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {regText}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Seller: {tx.seller_email || "Unknown"}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Transaction ID: {tx.$id}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700">
+                          COMPLETED
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                        <p>
+                          <strong>Sale price:</strong> £
+                          {(tx.sale_price ?? 0).toFixed(2)}
+                        </p>
+                        <p>
+                          <strong>Commission:</strong> £
+                          {(tx.commission_amount ?? 0).toFixed(2)} (
+                          {tx.commission_rate ?? 0}%)
+                        </p>
+                        <p>
+                          <strong>DVLA fee:</strong> £
+                          {(tx.dvla_fee ?? 0).toFixed(2)}
+                        </p>
+                        <p>
+                          <strong>Total paid (approx):</strong> £
+                          {(
+                            (tx.sale_price ?? 0) + (tx.dvla_fee ?? 0)
+                          ).toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                        <p>
+                          <strong>Created:</strong>{" "}
+                          {created || "Not recorded"}
+                        </p>
+                        <p>
+                          <strong>Last updated:</strong>{" "}
+                          {updated || "Not recorded"}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* HISTORY TAB */}
         {activeTab === "history" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold mb-2 text-yellow-700">History</h2>
 
-            {plates.length === 0 ? (
+            {historyPlates.length === 0 ? (
               <p className="text-gray-600 text-sm text-center">
                 Sold, unsold and completed auctions will appear here.
               </p>
             ) : (
               <div className="grid gap-5">
-                {plates.map((plate) => (
+                {historyPlates.map((plate) => (
                   <div
                     key={plate.$id}
                     className="border border-gray-200 rounded-xl p-5 bg-gray-50 shadow-sm"
@@ -1430,154 +1730,369 @@ export default function DashboardPage() {
           </div>
         )}
 
-               {/* TRANSACTIONS TAB */}
+                        {/* TRANSACTIONS TAB */}
         {activeTab === "transactions" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold mb-2 text-yellow-700">
               Transactions &amp; Documents
             </h2>
             <p className="text-sm text-gray-600 mb-2">
-              Active sales and purchases where documents, payment and DVLA
-              transfer are still in progress. You can upload required documents
-              for any sale where we&apos;re waiting on you.
+              This page shows all{" "}
+              <strong>live sales and purchases</strong> that are still in
+              progress. It is split into:
+              <br />
+              <strong>Sales in progress</strong> (where you are the seller) and{" "}
+              <strong>Purchases in progress</strong> (where you are the buyer).
             </p>
 
-            {transactions.length === 0 ? (
+            {activeSales.length === 0 && activePurchases.length === 0 ? (
               <p className="text-gray-600 text-sm text-center">
-                You don&apos;t have any transactions yet.
+                You don&apos;t have any active transactions right now.
               </p>
             ) : (
-              <div className="grid gap-4">
-                {transactions.map((tx) => {
-                  const created =
-                    tx.created_at && !isNaN(new Date(tx.created_at).getTime())
-                      ? new Date(tx.created_at).toLocaleString("en-GB")
-                      : null;
+              <div className="space-y-8">
+                {/* SALES IN PROGRESS (YOU AS SELLER) */}
+                {activeSales.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-yellow-700">
+                      Sales in progress (you as seller)
+                    </h3>
+                    <p className="text-xs text-gray-600">
+                      These are plates you have{" "}
+                      <strong>sold on AuctionMyPlate</strong> and are now going
+                      through documents, payment and DVLA transfer.
+                    </p>
 
-                  const updated =
-                    tx.updated_at && !isNaN(new Date(tx.updated_at).getTime())
-                      ? new Date(tx.updated_at).toLocaleString("en-GB")
-                      : null;
+                    <div className="grid gap-4">
+                      {activeSales.map((tx) => {
+                        const created =
+                          tx.created_at &&
+                          !isNaN(new Date(tx.created_at).getTime())
+                            ? new Date(tx.created_at).toLocaleString("en-GB")
+                            : null;
 
-                  const statusLabel =
-                    tx.transaction_status || tx.payment_status || "pending";
+                        const updated =
+                          tx.updated_at &&
+                          !isNaN(new Date(tx.updated_at).getTime())
+                            ? new Date(tx.updated_at).toLocaleString("en-GB")
+                            : null;
 
-                  const statusClasses =
-                    statusLabel === "completed" || statusLabel === "paid"
-                      ? "bg-green-100 text-green-700"
-                      : statusLabel === "processing"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-600";
+                        const regText =
+                          (tx as any).registration ||
+                          (tx as any).plate_registration ||
+                          (tx as any).plate_id ||
+                          "UNKNOWN";
 
-                  const regText =
-                    (tx as any).registration ||
-                    (tx as any).plate_registration ||
-                    (tx as any).plate_id ||
-                    "UNKNOWN";
+                        const listingOrPlateId =
+                          (tx as any).plate_id ||
+                          (tx as any).listing_id ||
+                          "N/A";
 
-                  const listingOrPlateId =
-                    (tx as any).plate_id ||
-                    (tx as any).listing_id ||
-                    "N/A";
+                        const isSeller = tx.seller_email === user?.email;
+                        const isBuyer = tx.buyer_email === user?.email;
 
-                  const isSeller = tx.seller_email === user?.email;
-                  const isAwaitingDocs =
-                    tx.transaction_status === "awaiting_documents";
+                        const sellerDocsRequested =
+                          !!(tx.seller_docs_requested &&
+                          !tx.seller_docs_received);
+                        const buyerDocsRequested =
+                          !!(tx.buyer_info_requested &&
+                          !tx.buyer_info_received);
 
-                  return (
-                    <div
-                      key={tx.$id}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
-                    >
-                      {/* Header: plate / listing / status */}
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-4">
-                          {/* Plate visual */}
-                          <NumberPlate
-                            reg={regText}
-                            size="card"
-                            variant="rear"
-                            showBlueBand={true}
-                          />
+                        const baseStatusLabel =
+                          tx.transaction_status ||
+                          tx.payment_status ||
+                          "pending";
 
-                          {/* Text details */}
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {regText}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Listing / Plate ID: {listingOrPlateId}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Transaction ID: {tx.$id}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Role:{" "}
-                              {isSeller ? "Seller (you are being paid)" : "Buyer"}
-                            </p>
+                        let statusLabel = baseStatusLabel;
+                        if (
+                          (isSeller && sellerDocsRequested) ||
+                          (isBuyer && buyerDocsRequested)
+                        ) {
+                          statusLabel = "awaiting_your_documents";
+                        }
+
+                        const statusKey = statusLabel.toLowerCase();
+                        const statusClasses =
+                          statusKey === "completed" ||
+                          statusKey === "complete" ||
+                          statusKey === "paid"
+                            ? "bg-green-100 text-green-700"
+                            : statusKey.includes("awaiting")
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-gray-100 text-gray-600";
+
+                        const showUploader =
+                          !!profile &&
+                          ((isSeller && sellerDocsRequested) ||
+                            (isBuyer && buyerDocsRequested));
+
+                        return (
+                          <div
+                            key={tx.$id}
+                            className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                          >
+                            {/* Plate visual FULL WIDTH to avoid cropping */}
+                            <div className="mb-3 flex justify-start">
+                              <NumberPlate
+                                reg={regText}
+                                size="card"
+                                variant="rear"
+                                showBlueBand={true}
+                              />
+                            </div>
+
+                            {/* Header: text + status */}
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {regText}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Listing / Plate ID: {listingOrPlateId}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Transaction ID: {tx.$id}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Role: Seller (you are being paid)
+                                </p>
+                              </div>
+
+                              <span
+                                className={`px-3 py-1 rounded-md text-xs font-semibold ${statusClasses}`}
+                              >
+                                {statusLabel.replace(/_/g, " ").toUpperCase()}
+                              </span>
+                            </div>
+
+                            {/* Money summary */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                              <p>
+                                <strong>Sale price:</strong> £
+                                {(tx.sale_price ?? 0).toFixed(2)}
+                              </p>
+                              <p>
+                                <strong>Commission:</strong> £
+                                {(tx.commission_amount ?? 0).toFixed(2)} (
+                                {tx.commission_rate ?? 0}%)
+                              </p>
+                              <p>
+                                <strong>Seller payout:</strong> £
+                                {(tx.seller_payout ?? 0).toFixed(2)}
+                              </p>
+                              <p>
+                                <strong>DVLA fee (buyer pays):</strong> £
+                                {(tx.dvla_fee ?? 0).toFixed(2)}
+                              </p>
+                            </div>
+
+                            {/* Dates */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                              <p>
+                                <strong>Created:</strong>{" "}
+                                {created || "Not recorded"}
+                              </p>
+                              <p>
+                                <strong>Last updated:</strong>{" "}
+                                {updated || "Not recorded"}
+                              </p>
+                            </div>
+
+                            {/* Documents uploader – if admin is waiting on the seller (you) */}
+                            {showUploader && (
+                              <div className="mt-4 border-t pt-3">
+                                <p className="text-xs text-gray-600 mb-2">
+                                  We&apos;re waiting for documents from you as
+                                  the <strong>seller</strong>. Please upload
+                                  your DVLA paperwork (V5C, retention
+                                  certificate, or any documents we have
+                                  requested) so we can progress the transfer.
+                                </p>
+                                <SellerDocumentsUploader
+                                  sellerId={profile.$id}
+                                  transactionId={tx.$id}
+                                  existingDocuments={(tx as any).documents || []}
+                                />
+                              </div>
+                            )}
                           </div>
-                        </div>
-
-                        {/* Status pill */}
-                        <span
-                          className={`px-3 py-1 rounded-md text-xs font-semibold ${statusClasses}`}
-                        >
-                          {statusLabel.toUpperCase()}
-                        </span>
-                      </div>
-
-                      {/* Money summary */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
-                        <p>
-                          <strong>Sale price:</strong> £
-                          {(tx.sale_price ?? 0).toFixed(2)}
-                        </p>
-                        <p>
-                          <strong>Commission:</strong> £
-                          {(tx.commission_amount ?? 0).toFixed(2)} (
-                          {tx.commission_rate ?? 0}%)
-                        </p>
-                        <p>
-                          <strong>Seller payout:</strong> £
-                          {(tx.seller_payout ?? 0).toFixed(2)}
-                        </p>
-                        <p>
-                          <strong>DVLA fee (buyer pays):</strong> £
-                          {(tx.dvla_fee ?? 0).toFixed(2)}
-                        </p>
-                      </div>
-
-                      {/* Dates */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
-                        <p>
-                          <strong>Created:</strong>{" "}
-                          {created || "Not recorded"}
-                        </p>
-                        <p>
-                          <strong>Last updated:</strong>{" "}
-                          {updated || "Not recorded"}
-                        </p>
-                      </div>
-
-                      {/* Seller documents uploader for active sales */}
-                      {isSeller && isAwaitingDocs && profile && (
-                        <div className="mt-4 border-t pt-3">
-                          <p className="text-xs text-gray-600 mb-2">
-                            To progress this sale, please upload your DVLA
-                            paperwork (V5C, retention certificate, or any
-                            documents we have requested). Our team will review
-                            them before processing your payout.
-                          </p>
-                          <SellerDocumentsUploader
-                            sellerId={profile.$id}
-                            transactionId={tx.$id}
-                            existingDocuments={(tx as any).documents || []}
-                          />
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  </div>
+                )}
+
+                {/* PURCHASES IN PROGRESS (YOU AS BUYER) */}
+                {activePurchases.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-yellow-700">
+                      Purchases in progress (you as buyer)
+                    </h3>
+                    <p className="text-xs text-gray-600">
+                      These are plates you have{" "}
+                      <strong>bought on AuctionMyPlate</strong> where we are
+                      still completing checks, documents and DVLA transfer.
+                    </p>
+
+                    <div className="grid gap-4">
+                      {activePurchases.map((tx) => {
+                        const created =
+                          tx.created_at &&
+                          !isNaN(new Date(tx.created_at).getTime())
+                            ? new Date(tx.created_at).toLocaleString("en-GB")
+                            : null;
+
+                        const updated =
+                          tx.updated_at &&
+                          !isNaN(new Date(tx.updated_at).getTime())
+                            ? new Date(tx.updated_at).toLocaleString("en-GB")
+                            : null;
+
+                        const regText =
+                          (tx as any).registration ||
+                          (tx as any).plate_registration ||
+                          (tx as any).plate_id ||
+                          "UNKNOWN";
+
+                        const listingOrPlateId =
+                          (tx as any).plate_id ||
+                          (tx as any).listing_id ||
+                          "N/A";
+
+                        const isSeller = tx.seller_email === user?.email;
+                        const isBuyer = tx.buyer_email === user?.email;
+
+                        const sellerDocsRequested =
+                          !!(tx.seller_docs_requested &&
+                          !tx.seller_docs_received);
+                        const buyerDocsRequested =
+                          !!(tx.buyer_info_requested &&
+                          !tx.buyer_info_received);
+
+                        const baseStatusLabel =
+                          tx.transaction_status ||
+                          tx.payment_status ||
+                          "pending";
+
+                        let statusLabel = baseStatusLabel;
+                        if (
+                          (isSeller && sellerDocsRequested) ||
+                          (isBuyer && buyerDocsRequested)
+                        ) {
+                          statusLabel = "awaiting_your_documents";
+                        }
+
+                        const statusKey = statusLabel.toLowerCase();
+                        const statusClasses =
+                          statusKey === "completed" ||
+                          statusKey === "complete" ||
+                          statusKey === "paid"
+                            ? "bg-green-100 text-green-700"
+                            : statusKey.includes("awaiting")
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-gray-100 text-gray-600";
+
+                        const showUploader =
+                          !!profile &&
+                          ((isSeller && sellerDocsRequested) ||
+                            (isBuyer && buyerDocsRequested));
+
+                        return (
+                          <div
+                            key={tx.$id}
+                            className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                          >
+                            {/* Plate visual FULL WIDTH to avoid cropping */}
+                            <div className="mb-3 flex justify-start">
+                              <NumberPlate
+                                reg={regText}
+                                size="card"
+                                variant="rear"
+                                showBlueBand={true}
+                              />
+                            </div>
+
+                            {/* Header: text + status */}
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {regText}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Listing / Plate ID: {listingOrPlateId}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Transaction ID: {tx.$id}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Role: Buyer (you are receiving the plate)
+                                </p>
+                              </div>
+
+                              <span
+                                className={`px-3 py-1 rounded-md text-xs font-semibold ${statusClasses}`}
+                              >
+                                {statusLabel.replace(/_/g, " ").toUpperCase()}
+                              </span>
+                            </div>
+
+                            {/* Money summary */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                              <p>
+                                <strong>Sale price:</strong> £
+                                {(tx.sale_price ?? 0).toFixed(2)}
+                              </p>
+                              <p>
+                                <strong>Commission:</strong> £
+                                {(tx.commission_amount ?? 0).toFixed(2)} (
+                                {tx.commission_rate ?? 0}%)
+                              </p>
+                              <p>
+                                <strong>DVLA fee (you pay):</strong> £
+                                {(tx.dvla_fee ?? 0).toFixed(2)}
+                              </p>
+                              <p>
+                                <strong>Estimated total:</strong> £
+                                {(
+                                  (tx.sale_price ?? 0) + (tx.dvla_fee ?? 0)
+                                ).toFixed(2)}
+                              </p>
+                            </div>
+
+                            {/* Dates */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                              <p>
+                                <strong>Created:</strong>{" "}
+                                {created || "Not recorded"}
+                              </p>
+                              <p>
+                                <strong>Last updated:</strong>{" "}
+                                {updated || "Not recorded"}
+                              </p>
+                            </div>
+
+                            {/* Documents uploader – if admin is waiting on the buyer (you) */}
+                            {showUploader && (
+                              <div className="mt-4 border-t pt-3">
+                                <p className="text-xs text-gray-600 mb-2">
+                                  We&apos;re waiting for documents from you as
+                                  the <strong>buyer</strong>. Please upload the
+                                  requested documents so we can complete checks
+                                  and move to the next step.
+                                </p>
+                                <SellerDocumentsUploader
+                                  sellerId={profile.$id}
+                                  transactionId={tx.$id}
+                                  existingDocuments={(tx as any).documents || []}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

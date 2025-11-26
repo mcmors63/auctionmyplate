@@ -1,3 +1,4 @@
+// app/api/admin/mark-sold/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Client, Databases, ID } from "node-appwrite";
 import nodemailer from "nodemailer";
@@ -32,6 +33,10 @@ const TX_DB_ID =
 // HARD-CODED: your Transactions table ID really is "transactions"
 const TX_COLLECTION_ID = "transactions";
 
+// Public site URL (for dashboard links in emails)
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://auctionmyplate.co.uk";
+
 console.log("MARK-SOLD ENV CHECK", {
   endpoint,
   projectId,
@@ -64,7 +69,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!PLATES_DB_ID || !PLATES_COLLECTION_ID || !TX_DB_ID || !TX_COLLECTION_ID) {
+    if (
+      !PLATES_DB_ID ||
+      !PLATES_COLLECTION_ID ||
+      !TX_DB_ID ||
+      !TX_COLLECTION_ID
+    ) {
       console.error("❌ MARK-SOLD: Missing DB/collection IDs", {
         PLATES_DB_ID,
         PLATES_COLLECTION_ID,
@@ -135,7 +145,9 @@ export async function POST(req: NextRequest) {
         : 10; // fallback 10%
 
     const listingFee =
-      typeof listingFeeRaw === "number" && listingFeeRaw >= 0 ? listingFeeRaw : 0;
+      typeof listingFeeRaw === "number" && listingFeeRaw >= 0
+        ? listingFeeRaw
+        : 0;
 
     const commissionAmount = Math.round((salePrice * commissionRate) / 100);
     const dvlaFee = 80; // buyer pays this
@@ -143,7 +155,7 @@ export async function POST(req: NextRequest) {
 
     const nowIso = new Date().toISOString();
 
-    // 3) Create transaction (matches your Transactions schema + new flags)
+    // 3) Create transaction (matches your Transactions schema + flags)
     const txDoc = await databases.createDocument(
       TX_DB_ID,
       TX_COLLECTION_ID,
@@ -217,52 +229,128 @@ export async function POST(req: NextRequest) {
         });
 
         const regText = registration || "your registration";
-        const salePriceText = salePrice.toLocaleString();
-        const sellerPayoutText = sellerPayout.toLocaleString();
+        const salePriceText = salePrice.toLocaleString("en-GB");
+        const sellerPayoutText = sellerPayout.toLocaleString("en-GB");
+        const dashboardLink = `${SITE_URL}/dashboard`;
 
-        // A) Seller email
+        // ------------------------------
+        // A) SELLER EMAILS (2 emails)
+        // ------------------------------
+
+        // 1) Celebration email
         await transporter.sendMail({
           from: `"AuctionMyPlate" <${process.env.SMTP_USER}>`,
           to: sellerEmail,
-          subject: `Your number plate has sold: ${regText}`,
+          subject: `🎉 Your number plate has sold: ${regText}`,
           html: `
-            <p>Congratulations.</p>
-            <p>Your number plate <strong>${regText}</strong> has sold for <strong>£${salePriceText}</strong>.</p>
-            <p>We will return <strong>£${sellerPayoutText}</strong> to you by bank transfer within 3 working days (subject to receiving the correct paperwork from you and the buyer).</p>
-            <p>You will receive an email requesting further details to process the transfer.</p>
-            <p>Thank you for your business.</p>
+            <p>Fantastic news!</p>
+            <p>Your number plate <strong>${regText}</strong> has just sold on <strong>AuctionMyPlate</strong> for <strong>£${salePriceText}</strong>.</p>
+            <p>Based on our current fee structure, your expected payout is <strong>£${sellerPayoutText}</strong><br />
+            <small>(subject to us receiving the correct paperwork from you and the buyer, and the DVLA transfer completing).</small></p>
+            <p>You can keep an eye on progress in your dashboard at any time:</p>
+            <p><a href="${dashboardLink}" target="_blank" rel="noopener noreferrer">${dashboardLink}</a></p>
+            <p>We’ll also send you a separate email explaining exactly what documents we need from you next.</p>
+            <p>Thank you for trusting <strong>AuctionMyPlate.co.uk</strong> with your sale.</p>
           `,
         });
 
-        // B) Buyer email (only if we have their email)
+        // 2) Documents email (SELLER)
+        await transporter.sendMail({
+          from: `"AuctionMyPlate" <${process.env.SMTP_USER}>`,
+          to: sellerEmail,
+          subject: `📄 Action needed: documents for ${regText}`,
+          html: `
+            <p>To complete the sale of <strong>${regText}</strong>, we now need your DVLA paperwork.</p>
+            <p>This may include your V5C/logbook or retention certificate, depending on how the plate is currently held.</p>
+            <p>Please log in to your AuctionMyPlate dashboard and upload the requested documents in the <strong>Transactions</strong> section:</p>
+            <p><a href="${dashboardLink}" target="_blank" rel="noopener noreferrer">${dashboardLink}</a></p>
+            <p>Once our team has checked everything, we’ll proceed with the DVLA transfer and your payout of <strong>£${sellerPayoutText}</strong>.</p>
+            <p>If anything doesn’t make sense, just reply to this email or contact <a href="mailto:admin@auctionmyplate.co.uk">admin@auctionmyplate.co.uk</a>.</p>
+            <p>Thank you,<br />AuctionMyPlate.co.uk</p>
+          `,
+        });
+
+        // ------------------------------
+        // B) BUYER EMAILS (if email supplied)
+        // ------------------------------
         if (buyerEmail) {
+          // 1) Celebration email
           await transporter.sendMail({
             from: `"AuctionMyPlate" <${process.env.SMTP_USER}>`,
             to: buyerEmail,
-            subject: `You’ve purchased ${regText}`,
+            subject: `🎉 You’ve purchased ${regText} on AuctionMyPlate`,
             html: `
-              <p>Congratulations.</p>
-              <p>You have successfully purchased <strong>${regText}</strong> for the sum of <strong>£${salePriceText}</strong>.</p>
-              <p>This amount will be taken from your registered payment option once you have provided the requested information, which will be sent in a separate email.</p>
-              <p>Please remember that the registration must go onto a vehicle which is taxed and holds a valid MOT (if required). This is required by DVLA for the transfer process.</p>
+              <p>Congratulations!</p>
+              <p>You’ve successfully purchased <strong>${regText}</strong> on <strong>AuctionMyPlate</strong> for <strong>£${salePriceText}</strong>.</p>
+              <p>Our team will now guide you through the DVLA transfer so the registration can be correctly assigned to your vehicle.</p>
+              <p>You can view the transaction and next steps in your dashboard:</p>
+              <p><a href="${dashboardLink}" target="_blank" rel="noopener noreferrer">${dashboardLink}</a></p>
+              <p>Please remember the registration must go onto a vehicle that is taxed and holds a valid MOT (if required). This is a DVLA requirement.</p>
+              <p>Thank you for buying through <strong>AuctionMyPlate.co.uk</strong>.</p>
+            `,
+          });
+
+          // 2) Documents / info email (BUYER) – now very explicit
+          await transporter.sendMail({
+            from: `"AuctionMyPlate" <${process.env.SMTP_USER}>`,
+            to: buyerEmail,
+            subject: `📄 Action needed: documents & details for ${regText}`,
+            html: `
+              <p>To complete your purchase of <strong>${regText}</strong>, we now need a few documents and details from you.</p>
+
+              <p><strong>What we typically need from you:</strong></p>
+              <ul>
+                <li>A clear photo or scan of the <strong>V5C (logbook)</strong> for the vehicle the plate will be assigned to.</li>
+                <li>A clear photo of your <strong>photocard driving licence</strong>.</li>
+                <li>Any additional proof we request in your AuctionMyPlate dashboard (for example, proof of address if needed).</li>
+              </ul>
+
+              <p><strong>How to upload your documents:</strong></p>
+              <ol>
+                <li>Go to <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer">${dashboardLink}</a> and log in.</li>
+                <li>Click <strong>My Dashboard</strong>.</li>
+                <li>Open the <strong>Transactions &amp; Documents</strong> tab.</li>
+                <li>Find the transaction for <strong>${regText}</strong>.</li>
+                <li>Use the <strong>Upload documents</strong> section to upload each required file (photos or PDFs are fine).</li>
+              </ol>
+
+              <p>
+                Once you’ve uploaded your documents, our team will review them, confirm your vehicle is eligible 
+                (taxed and with a valid MOT if required), and then complete payment and the DVLA transfer.
+              </p>
+
+              <p>If anything is unclear, you can reply to this email or contact <a href="mailto:admin@auctionmyplate.co.uk">admin@auctionmyplate.co.uk</a>.</p>
+
+              <p>Thank you,<br />AuctionMyPlate.co.uk</p>
             `,
           });
         }
 
-        // C) Admin email
+        // ------------------------------
+        // C) ADMIN EMAIL (single summary)
+        // ------------------------------
         await transporter.sendMail({
           from: `"AuctionMyPlate" <${process.env.SMTP_USER}>`,
           to: "admin@auctionmyplate.co.uk",
-          subject: `Plate sold: ${regText}`,
+          subject: `Plate sold: ${regText} for £${salePriceText}`,
           html: `
-            <p>Registration <strong>${regText}</strong> has been sold.</p>
+            <p>A plate has just sold on AuctionMyPlate.</p>
             <ul>
-              <li>Sale price: £${salePriceText}</li>
-              <li>Seller payout: £${sellerPayoutText}</li>
-              <li>Seller: ${sellerEmail}</li>
-              <li>Buyer: ${buyerEmail || "not provided"}</li>
+              <li><strong>Registration:</strong> ${regText}</li>
+              <li><strong>Sale price:</strong> £${salePriceText}</li>
+              <li><strong>Seller payout (before any manual adjustments):</strong> £${sellerPayoutText}</li>
+              <li><strong>Seller:</strong> ${sellerEmail}</li>
+              <li><strong>Buyer:</strong> ${buyerEmail || "not provided"}</li>
             </ul>
-            <p>Please commence the transfer process.</p>
+            <p>Next admin actions:</p>
+            <ul>
+              <li>Ensure seller documents are requested and tracked</li>
+              <li>Ensure buyer information & vehicle details are collected</li>
+              <li>Confirm tax & MOT status where required</li>
+              <li>Take payment</li>
+              <li>Complete DVLA transfer and update the transaction status to "complete" in the admin panel</li>
+            </ul>
+            <p>This is an automated notification from AuctionMyPlate.co.uk.</p>
           `,
         });
 

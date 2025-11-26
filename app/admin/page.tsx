@@ -86,8 +86,7 @@ export default function AdminPage() {
       try {
         if (activeTab === "soldPending" || activeTab === "complete") {
           // Transactions view
-          const txStatus =
-            activeTab === "soldPending" ? "pending" : "complete";
+          const txStatus = activeTab === "soldPending" ? "pending" : "complete";
 
           const res = await databases.listDocuments(
             DB_ID,
@@ -201,10 +200,8 @@ export default function AdminPage() {
       let data: any = null;
 
       if (contentType.includes("application/json")) {
-        // ✅ Safe to parse as JSON
         data = await res.json();
       } else {
-        // ❌ Server returned HTML or something else – log it
         const text = await res.text();
         console.error("Non-JSON response from /api/admin/reject-listing:", {
           status: res.status,
@@ -221,11 +218,9 @@ export default function AdminPage() {
         throw new Error(data?.error || "Failed to reject plate.");
       }
 
-      // ✅ Success – update UI
       setMessage(`Plate ${plate.registration} rejected.`);
       setSelectedPlate(null);
 
-      // Refresh list for current tab
       const updated = await databases.listDocuments(
         DB_ID,
         PLATES_COLLECTION_ID,
@@ -263,7 +258,7 @@ export default function AdminPage() {
 
   // ------------------------------------------------------
   // MARK LISTING SOLD -> creates Transaction row (calls API)
-  // ------------------------------------------------------
+// ------------------------------------------------------
   const markListingSold = async (listing: any) => {
     const salePriceStr = window.prompt(
       `Enter final sale price for ${listing.registration}:`,
@@ -317,7 +312,6 @@ export default function AdminPage() {
         `Listing ${listing.registration} marked as sold and transaction created.`
       );
 
-      // Refresh live listings
       const updated = await databases.listDocuments(
         DB_ID,
         PLATES_COLLECTION_ID,
@@ -525,121 +519,169 @@ export default function AdminPage() {
           ))}
 
         {/* TRANSACTIONS VIEW (Sold / Pending + Complete) */}
-        {!loading &&
-          (activeTab === "soldPending" || activeTab === "complete") && (
-            <div className="mt-6">
-              <h2 className="text-2xl font-bold text-yellow-700 mb-3">
-                {activeTab === "soldPending"
-                  ? "Sold / Pending (Paperwork & Payment)"
-                  : "Complete Transactions"}
-              </h2>
+{!loading && activeTab === "soldPending" && (
+  <div className="mt-6">
+    <h2 className="text-xl font-bold mb-2 text-yellow-700">
+      Sold / Pending (Paperwork &amp; Payment)
+    </h2>
 
-              {transactions.length === 0 ? (
-                <p className="text-gray-600">
-                  {activeTab === "soldPending"
-                    ? "No sold plates waiting for paperwork or payment."
-                    : "No completed transactions yet."}
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-gray-100">
-                        <th className="text-left py-2 px-2">Reg</th>
-                        <th className="text-left py-2 px-2">
-                          Listing ID
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Seller Email
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Buyer Email
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Sale Price
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Commission
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Seller Payout
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          DVLA Fee
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Payment Status
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Transaction Status
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Created
-                        </th>
-                        <th className="text-left py-2 px-2">
-                          Updated
-                        </th>
-                        <th className="text-left py-2 px-2">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transactions.map((tx) => (
-                        <tr
-                          key={tx.$id}
-                          className="border-b last:border-0"
-                        >
-                          <td className="py-2 px-2 font-mono">
-                            {tx.registration || "-"}
-                          </td>
-                          <td className="py-2 px-2">
-                            {tx.listing_id || "-"}
-                          </td>
-                          <td className="py-2 px-2 text-xs">
-                            {tx.seller_email}
-                          </td>
-                          <td className="py-2 px-2 text-xs">
-                            {tx.buyer_email}
-                          </td>
-                          <td className="py-2 px-2">
-                            {formatMoney(tx.sale_price)}
-                          </td>
-                          <td className="py-2 px-2">
-                            {formatMoney(tx.commission_amount)}
-                          </td>
-                          <td className="py-2 px-2 font-semibold">
-                            {formatMoney(tx.seller_payout)}
-                          </td>
-                          <td className="py-2 px-2">
-                            {formatMoney(tx.dvla_fee)}
-                          </td>
-                          <td className="py-2 px-2 text-xs">
-                            {tx.payment_status}
-                          </td>
-                          <td className="py-2 px-2 text-xs">
-                            {tx.transaction_status}
-                          </td>
-                          <td className="py-2 px-2 text-xs">
-                            {formatDateTime(tx.created_at)}
-                          </td>
-                          <td className="py-2 px-2 text-xs">
-                            {formatDateTime(tx.updated_at)}
-                          </td>
-                          <td className="py-2 px-2">
-                            <a
-                              href={`/admin/transaction/${tx.$id}`}
-                              className="text-xs text-blue-600 underline"
-                            >
-                              View
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+    {transactions.length === 0 ? (
+      <p className="text-sm text-gray-600">
+        No sold plates waiting for paperwork or payment.
+      </p>
+    ) : (
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table className="min-w-full text-left text-xs md:text-sm">
+          <thead className="bg-gray-100 text-gray-700">
+            <tr>
+              <th className="py-2 px-2">Reg</th>
+              <th className="py-2 px-2">Listing ID</th>
+              <th className="py-2 px-2">Seller Email</th>
+              <th className="py-2 px-2">Buyer Email</th>
+              <th className="py-2 px-2">Sale Price</th>
+              <th className="py-2 px-2">Commission</th>
+              <th className="py-2 px-2">Seller Payout</th>
+              <th className="py-2 px-2">DVLA Fee</th>
+              <th className="py-2 px-2">Payment Status</th>
+              <th className="py-2 px-2">Transaction Status</th>
+              <th className="py-2 px-2">Created</th>
+              <th className="py-2 px-2">Updated</th>
+              <th className="py-2 px-2 text-center">Docs</th>
+              <th className="py-2 px-2 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {transactions.map((tx) => (
+              <tr key={tx.$id} className="hover:bg-yellow-50">
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.registration || "-"}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.listing_id || "-"}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.seller_email}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.buyer_email || "-"}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  £{(tx.sale_price ?? 0).toLocaleString("en-GB")}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  £{(tx.commission_amount ?? 0).toLocaleString("en-GB")} (
+                  {tx.commission_rate ?? 0}%)
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap font-semibold">
+                  £{(tx.seller_payout ?? 0).toLocaleString("en-GB")}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  £{(tx.dvla_fee ?? 0).toLocaleString("en-GB")}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.payment_status || "pending"}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.transaction_status || "pending"}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.created_at
+                    ? new Date(tx.created_at).toLocaleString("en-GB")
+                    : "-"}
+                </td>
+                <td className="py-2 px-2 whitespace-nowrap">
+                  {tx.updated_at
+                    ? new Date(tx.updated_at).toLocaleString("en-GB")
+                    : "-"}
+                </td>
+                <td className="py-2 px-2 text-center text-xs font-semibold">
+                  {Array.isArray(tx.documents) ? tx.documents.length : 0}
+                </td>
+                <td className="py-2 px-2 text-center space-x-2 whitespace-nowrap">
+                  <a
+                    href={`/admin/transaction/${tx.$id}`}
+                    className="text-xs text-blue-600 underline"
+                  >
+                    View
+                  </a>
+                    <button
+  type="button"
+  className="text-xs text-red-600 underline"
+  onClick={async () => {
+    // 1) Ask for a reason
+    const reasonInput = window.prompt(
+      "Reason for deleting / archiving this transaction? (This will be stored for record keeping.)",
+      ""
+    );
+
+    if (reasonInput === null) return; // cancelled
+
+    const reason = reasonInput.trim();
+    if (!reason) {
+      alert("Please enter a reason, or press Cancel to abort.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/admin/delete-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // MUST match the API: txId, not transactionId
+          txId: tx.$id,
+          reason,
+        }),
+      });
+
+      // Try to parse JSON only if the response is JSON
+      const contentType = res.headers.get("content-type") || "";
+      let data: any = null;
+
+      if (contentType.includes("application/json")) {
+        data = await res.json().catch(() => null);
+      } else {
+        const text = await res.text().catch(() => "");
+        console.error(
+          "Non-JSON response from /api/admin/delete-transaction:",
+          {
+            status: res.status,
+            statusText: res.statusText,
+            body: text,
+          }
+        );
+      }
+
+      if (!res.ok || (data && data.error)) {
+        console.error("Delete transaction failed:", data);
+        alert(
+          (data && data.error) ||
+            `Failed to delete transaction (HTTP ${res.status}).`
+        );
+        return;
+      }
+
+      // ✅ Remove this row from the Sold / Pending list in the UI
+      setTransactions((prev) => prev.filter((row) => row.$id !== tx.$id));
+
+      alert("Transaction archived as deleted.");
+    } catch (err) {
+      console.error("Delete transaction failed:", err);
+      alert("Failed to delete transaction.");
+    }
+  }}
+>
+  Delete
+</button>
+
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+)}
 
         {/* REVIEW MODAL */}
         {selectedPlate && (

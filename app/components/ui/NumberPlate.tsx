@@ -1,3 +1,4 @@
+// components/ui/NumberPlate.tsx
 "use client";
 
 import React from "react";
@@ -7,8 +8,8 @@ type NumberPlateProps = {
   variant?: "front" | "rear";
   size?: "standard" | "card" | "large";
   showBlueBand?: boolean;
-  editable?: boolean; // 🔥 NEW (for Sell a Plate)
-  onChange?: (v: string) => void; // 🔥 NEW
+  editable?: boolean;
+  onChange?: (v: string) => void;
 };
 
 /** Format into DVLA style → AB12 CDE */
@@ -28,32 +29,33 @@ export default function NumberPlate({
   variant = "rear",
   size = "standard",
   showBlueBand = true,
-  editable = false,   // 🔥 NEW
-  onChange,           // 🔥 NEW
+  editable = false,
+  onChange,
 }: NumberPlateProps) {
   const formattedReg = formatDVLA(reg);
 
-  // 🔥 Correct DVLA size ratios
   const sizeMap = {
     standard: { width: 350, height: 90, font: 46 },
-    card:     { width: 240, height: 60, font: 30 },
-    large:    { width: 420, height: 110, font: 55 },
+    card: { width: 240, height: 60, font: 30 },
+    large: { width: 420, height: 110, font: 55 },
   } as const;
 
   const { width, height, font } = sizeMap[size] ?? sizeMap.standard;
 
   const bgColour = variant === "rear" ? "bg-dvla-yellow" : "bg-white";
 
+  // Padding so text clears the blue band
+  const paddingLeft = showBlueBand ? "26%" : "10%";
+  const paddingRight = "10%";
+
   return (
-    <div className="flex items-center justify-center"
-      style={{ width, height }}
-    >
+    <div className="flex items-center justify-center" style={{ width, height }}>
       <div
         className={`relative flex h-full w-full items-center justify-center border-[6px] border-black rounded-md overflow-hidden ${bgColour}`}
       >
-        {/* Blue band (GB) */}
+        {/* Blue band (UK) – 🔧 reduced width from 18% → 14% */}
         {showBlueBand && (
-          <div className="absolute left-0 top-0 h-full w-[20%] bg-dvla-blue flex items-center justify-center">
+          <div className="absolute left-0 top-0 h-full w-[14%] bg-dvla-blue flex items-center justify-center">
             <span className="text-white font-bold text-sm -rotate-90 tracking-widest">
               UK
             </span>
@@ -67,8 +69,8 @@ export default function NumberPlate({
             maxLength={8}
             className="bg-transparent border-none outline-none font-dvla uppercase text-black text-center w-full"
             style={{
-              paddingLeft: showBlueBand ? "22%" : "10%",
-              paddingRight: "10%",
+              paddingLeft,
+              paddingRight,
               fontSize: font,
               letterSpacing: "8px",
             }}
@@ -80,8 +82,8 @@ export default function NumberPlate({
           <span
             className="font-dvla text-black select-none uppercase"
             style={{
-              paddingLeft: showBlueBand ? "22%" : "10%",
-              paddingRight: "10%",
+              paddingLeft,
+              paddingRight,
               fontSize: font,
               letterSpacing: "8px",
               whiteSpace: "nowrap",

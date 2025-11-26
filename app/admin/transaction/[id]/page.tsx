@@ -49,6 +49,8 @@ type TxDoc = {
   buyer_payment_taken?: boolean;
   buyer_transfer_complete?: boolean;
 
+  documents?: any[];
+
   created_at?: string;
   updated_at?: string;
   [key: string]: any;
@@ -63,6 +65,7 @@ export default function AdminTransactionPage() {
   const [tx, setTx] = useState<TxDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string>("");
 
   // Local checkbox state
@@ -241,6 +244,55 @@ export default function AdminTransactionPage() {
     }
   };
 
+  const handleDeleteTransaction = async () => {
+    if (!tx) return;
+
+    const confirmDelete = window.confirm(
+      "Are you sure you want to remove this transaction from the main dashboard?\n\nIt will be archived for record keeping (not permanently deleted)."
+    );
+    if (!confirmDelete) return;
+
+    const reasonInput = window.prompt(
+      "Reason for deleting / archiving this transaction? (This will be stored on the transaction record.)",
+      ""
+    );
+
+    if (reasonInput === null) return; // cancelled
+
+    const reason = reasonInput.trim();
+    if (!reason) {
+      alert("Please enter a reason, or press Cancel to abort.");
+      return;
+    }
+
+    try {
+      setDeleting(true);
+
+      const res = await fetch("/api/admin/delete-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txId: tx.$id, // must match API
+          reason,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error("Delete transaction failed:", data);
+        throw new Error(data.error || "Request failed");
+      }
+
+      alert("Transaction archived as deleted.");
+      router.push("/admin");
+    } catch (err) {
+      console.error("Delete transaction failed:", err);
+      alert("Failed to delete transaction.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-yellow-50 py-10 px-6">
       <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-8">
@@ -267,8 +319,7 @@ export default function AdminTransactionPage() {
 
             <div className="mb-4 text-sm text-gray-700 space-y-1">
               <p>
-                <strong>Sale price:</strong>{" "}
-                {formatMoney(tx.sale_price)}
+                <strong>Sale price:</strong> {formatMoney(tx.sale_price)}
               </p>
               <p>
                 <strong>Seller payout:</strong>{" "}
@@ -443,13 +494,90 @@ export default function AdminTransactionPage() {
               </div>
             </div>
 
-            <button
-              disabled={saving}
-              onClick={handleSave}
-              className="bg-yellow-600 text-white px-6 py-2 rounded-md font-semibold disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Save Progress"}
-            </button>
+            {/* DOCUMENTS SECTION */}
+            <div className="mt-6 border rounded-xl p-4 bg-gray-50">
+              <h2 className="font-semibold text-lg mb-2">
+                Documents &amp; uploads
+              </h2>
+              <p className="text-xs text-gray-600 mb-3">
+                These are the files attached to this transaction by the
+                seller or buyer in their dashboard.
+              </p>
+
+              {Array.isArray(tx.documents) && tx.documents.length > 0 ? (
+                <ul className="space-y-2 text-sm">
+                  {tx.documents.map((doc: any, idx: number) => {
+                    const label =
+                      doc.label ||
+                      doc.description ||
+                      doc.type ||
+                      doc.role ||
+                      `Document ${idx + 1}`;
+                    const fileName =
+                      doc.fileName ||
+                      doc.name ||
+                      doc.originalName ||
+                      doc.filename;
+                    const url = doc.url || doc.publicUrl || null;
+
+                    return (
+                      <li
+                        key={doc.id || doc.fileId || idx}
+                        className="flex items-center justify-between border-b last:border-b-0 pb-2"
+                      >
+                        <div>
+                          <p className="font-semibold">{label}</p>
+                          {fileName && (
+                            <p className="text-xs text-gray-500">
+                              {fileName}
+                            </p>
+                          )}
+                        </div>
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 underline"
+                          >
+                            View
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            File stored in Appwrite – open from console
+                            if needed
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  No documents are attached to this transaction yet.
+                </p>
+              )}
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                disabled={saving}
+                onClick={handleSave}
+                className="bg-yellow-600 text-white px-6 py-2 rounded-md font-semibold disabled:opacity-60"
+              >
+                {saving ? "Saving…" : "Save Progress"}
+              </button>
+
+              <button
+                type="button"
+                disabled={saving || deleting}
+                onClick={handleDeleteTransaction}
+                className="bg-red-600 text-white px-6 py-2 rounded-md font-semibold disabled:opacity-60"
+              >
+                {deleting ? "Deleting…" : "Delete Transaction"}
+              </button>
+            </div>
           </>
         )}
       </div>

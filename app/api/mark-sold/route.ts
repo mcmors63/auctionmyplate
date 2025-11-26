@@ -36,6 +36,8 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL || "no-reply@auctionmyplate.co.uk";
 const ADMIN_EMAIL =
   process.env.ADMIN_NOTIFICATION_EMAIL || "admin@auctionmyplate.co.uk";
+ const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://auctionmyplate.co.uk";
 
 function createTransport() {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
@@ -93,7 +95,7 @@ async function sendTransactionEmails(ctx: EmailContext) {
     const text = [
       `Congratulations! Your number plate ${registration} has sold for ${saleStr}.`,
       ``,
-      `We will return you ${payoutStr} within 3 working days via bank transfer`,
+      `We will return you ${payoutStr} once the transfer is complete via bank transfer`,
       `(subject to receiving the correct paperwork from you and the buyer).`,
       ``,
       `You will receive an email requesting the further details we need to`,
@@ -112,6 +114,31 @@ async function sendTransactionEmails(ctx: EmailContext) {
       })
     );
   }
+
+      // 2nd seller email – request documents
+    const sellerDocsSubject = `Action required: documents for ${registration}`;
+    const sellerDocsText = [
+      `To complete the sale of ${registration}, we now need your DVLA documents (V5C/logbook or retention certificate as applicable).`,
+      ``,
+      `Please log in to your AuctionMyPlate dashboard and upload the required documents in the Transactions section:`,
+      `${SITE_URL}/dashboard`,
+      ``,
+      `Once we have received and checked your paperwork, we will proceed with the transfer, once complete we will process your payment of ${payoutStr}.`,
+      ``,
+      `If you have any questions, please email admin@auctionmyplate.co.uk.`,
+      ``,
+      `Thank you,`,
+      `AuctionMyPlate.co.uk`,
+    ].join("\n");
+
+    tasks.push(
+      transporter.sendMail({
+        from: FROM_EMAIL,
+        to: sellerEmail,
+        subject: sellerDocsSubject,
+        text: sellerDocsText,
+      })
+    );
 
   // Buyer email
   if (buyerEmail) {
@@ -140,6 +167,31 @@ async function sendTransactionEmails(ctx: EmailContext) {
       })
     );
   }
+
+      // 2nd seller email – request documents
+    const sellerDocsSubject = `Action required: documents for ${registration}`;
+    const sellerDocsText = [
+      `To complete the sale of ${registration}, we now need your DVLA documents (V5C/logbook or retention certificate as applicable).`,
+      ``,
+      `Please log in to your AuctionMyPlate dashboard and upload the required documents in the Transactions section:`,
+      `${SITE_URL}/dashboard`,
+      ``,
+      `Once we have received and checked your paperwork, we will proceed with the transfer, once complete we will process your payment of ${payoutStr}.`,
+      ``,
+      `If you have any questions, please email admin@auctionmyplate.co.uk.`,
+      ``,
+      `Thank you,`,
+      `AuctionMyPlate.co.uk`,
+    ].join("\n");
+
+    tasks.push(
+      transporter.sendMail({
+        from: FROM_EMAIL,
+        to: sellerEmail,
+        subject: sellerDocsSubject,
+        text: sellerDocsText,
+      })
+    );
 
   // Admin email
   if (ADMIN_EMAIL) {
@@ -248,7 +300,7 @@ export async function POST(req: NextRequest) {
         dvla_fee: dvlaFee,
         seller_payout: sellerPayout,
         payment_status: "pending",
-        transaction_status: "pending",
+        transaction_status: "awaiting_documents",
         created_at: nowIso,
         updated_at: nowIso,
       }

@@ -13,8 +13,8 @@ type Listing = {
   status?: string;
   current_bid?: number | null;
   bids?: number | null;
-  reserve_price?: number | null; // ✅ pull from Appwrite
-  buy_now?: number | null;       // ✅ NEW: Buy Now price
+  reserve_price?: number | null;
+  buy_now?: number | null;
   auction_start?: string | null;
   auction_end?: string | null;
 };
@@ -41,8 +41,9 @@ export default function ListingCard({ listing }: Props) {
   // -----------------------------
   // Status flags
   // -----------------------------
-  const isLive = status?.toLowerCase() === "live";
-  const isQueued = status?.toLowerCase() === "queued";
+  const lowerStatus = (status || "").toLowerCase();
+  const isLive = lowerStatus === "live";
+  const isQueued = lowerStatus === "queued";
 
   const timerLabel = isLive ? "AUCTION ENDS IN" : "AUCTION STARTS IN";
 
@@ -74,18 +75,32 @@ export default function ListingCard({ listing }: Props) {
   const hasBuyNow =
     isLive && typeof buy_now === "number" && buy_now > 0;
 
+  // -----------------------------
+  // Timer status for AdminAuctionTimer
+  // -----------------------------
+  let timerStatus: "queued" | "live" | "ended" | undefined;
+  if (
+    lowerStatus === "queued" ||
+    lowerStatus === "live" ||
+    lowerStatus === "ended"
+  ) {
+    timerStatus = lowerStatus as "queued" | "live" | "ended";
+  }
+
   return (
-    <div className="bg-white text-gray-900 border border-gold/40 rounded-xl shadow-md p-4 flex flex-col gap-3 transition hover:shadow-lg">
+    <div className="bg-white text-gray-900 border border-gold/40 rounded-xl shadow-md p-4 flex flex-col gap-3 transition hover:shadow-lg w-full">
       {/* HEADER */}
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col xs:flex-row justify-between gap-2 items-start">
+        {/* Listing ID */}
         <div>
           <p className="text-[9px] text-gold">Listing ID</p>
-          <p className="font-semibold text-[12px] max-w-[130px] truncate">
+          <p className="font-semibold text-[12px] max-w-[160px] truncate">
             {listing_id || $id}
           </p>
         </div>
 
-        <div className="text-right">
+        {/* Reg */}
+        <div className="ml-auto text-right">
           <p className="text-[9px] text-gold">Reg</p>
           <p className="font-bold text-base tracking-wide">
             {registration}
@@ -93,7 +108,7 @@ export default function ListingCard({ listing }: Props) {
         </div>
 
         {/* BADGES */}
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-row xs:flex-col items-end gap-1 xs:ml-2">
           {isLive && (
             <span className="px-2 py-0.5 text-[9px] font-bold bg-gold text-black rounded-full">
               LIVE
@@ -115,79 +130,67 @@ export default function ListingCard({ listing }: Props) {
       </div>
 
       {/* PLATE PREVIEW */}
-      <div className="flex flex-col items-center gap-2 py-2 bg-gray-100 rounded-lg border border-gold/20">
-        <div className="bg-white text-black font-extrabold tracking-[0.12em] text-xl px-3 py-1.5 rounded-md border border-gray-400 shadow-sm">
+      <div className="flex flex-col items-center gap-1.5 py-2 bg-gray-100 rounded-lg border border-gold/20">
+        {/* Front plate */}
+        <div className="bg-white text-black font-extrabold tracking-[0.12em] text-lg sm:text-xl px-3 py-1.5 rounded-md border border-gray-400 shadow-sm w-full max-w-[260px] text-center">
           {registration}
         </div>
 
-        <div className="bg-yellow-300 text-black font-extrabold tracking-[0.12em] text-xl px-3 py-1.5 rounded-md border border-yellow-600 shadow-sm">
+        {/* Rear plate */}
+        <div className="bg-yellow-300 text-black font-extrabold tracking-[0.12em] text-lg sm:text-xl px-3 py-1.5 rounded-md border border-yellow-600 shadow-sm w-full max-w-[260px] text-center">
           {registration}
         </div>
       </div>
 
-      {/* TIMER + BID INFO */}
-      <div className="flex justify-between items-center w-full">
-        {/* TIMER */}
-        <div>
-          <p className="text-[9px] text-gray-500">{timerLabel}</p>
-
-                    <div className="px-3 py-1.5 bg-white border border-gold rounded-lg shadow-sm">
-           {(() => {
-  // Only allow the exact union values "queued" | "live" | "ended"
-  let timerStatus: "queued" | "live" | "ended" | undefined;
-
-  if (status === "queued" || status === "live" || status === "ended") {
-    timerStatus = status;
-  } else {
-    timerStatus = undefined;
-  }
-
-  return (
-    <AdminAuctionTimer
-      start={auction_start ?? null}
-      end={auction_end ?? null}
-      status={timerStatus}
-    />
-  );
-})()}
-
+      {/* TIMER + BID INFO – STACK ON MOBILE */}
+      <div className="flex flex-col gap-3">
+        {/* TIMER BLOCK */}
+        <div className="w-full">
+          <p className="text-[9px] text-gray-500 mb-0.5">{timerLabel}</p>
+          <div className="px-3 py-1.5 bg-white border border-gold rounded-lg shadow-sm inline-block min-w-[180px]">
+            <AdminAuctionTimer
+              start={auction_start ?? null}
+              end={auction_end ?? null}
+              status={timerStatus}
+            />
           </div>
         </div>
 
-        {/* BID AMOUNT + RESERVE / BUY NOW */}
-        <div className="text-right ml-2">
-          <p className="text-[9px] text-gold">Bid</p>
-          <p className="font-bold text-gold text-sm">
-            £{numericCurrentBid.toLocaleString()}
-          </p>
-
-          {/* ✅ Only ever show positive "Reserve Met" */}
-          {reserveMet && (
-            <p className="text-[9px] text-green-700 font-semibold mt-1">
-              Reserve Met
+        {/* BID / BUY NOW / BIDS COUNT */}
+        <div className="flex flex-col xs:flex-row justify-between gap-2 items-start xs:items-end">
+          {/* Bid + reserve + buy now */}
+          <div className="text-left xs:text-right flex-1">
+            <p className="text-[9px] text-gold">Bid</p>
+            <p className="font-bold text-gold text-sm">
+              £{numericCurrentBid.toLocaleString()}
             </p>
-          )}
 
-          {/* ✅ Show Buy Now only when live and > 0 */}
-          {hasBuyNow && (
-            <p className="text-[9px] text-emerald-700 font-semibold mt-1">
-              Buy Now: £{buy_now!.toLocaleString()}
+            {reserveMet && (
+              <p className="text-[9px] text-green-700 font-semibold mt-1">
+                Reserve Met
+              </p>
+            )}
+
+            {hasBuyNow && (
+              <p className="text-[9px] text-emerald-700 font-semibold mt-1">
+                Buy Now: £{buy_now!.toLocaleString()}
+              </p>
+            )}
+
+            <p className="text-[8px] text-gray-500 mt-1 leading-tight max-w-[200px]">
+              £80 DVLA paperwork fee added to all winning bids.
             </p>
-          )}
+          </div>
 
-          <p className="text-[8px] text-gray-500 mt-1 leading-tight max-w-[120px]">
-            £80 DVLA paperwork fee added to all winning bids.
-          </p>
-        </div>
-
-        {/* BID COUNT */}
-        <div className="text-right">
-          <p className="text-[9px] text-gold">Bids</p>
-          <p className="font-semibold text-sm">{bids || 0}</p>
+          {/* Bid count */}
+          <div className="text-right min-w-[50px]">
+            <p className="text-[9px] text-gold">Bids</p>
+            <p className="font-semibold text-sm">{bids || 0}</p>
+          </div>
         </div>
       </div>
 
-      {/* FOOTER */}
+      {/* FOOTER BUTTONS */}
       <div className="flex justify-between items-center pt-1">
         <Link
           href={`/place_bid?id=${$id}`}

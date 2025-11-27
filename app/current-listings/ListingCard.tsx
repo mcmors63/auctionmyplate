@@ -129,24 +129,18 @@ export default function ListingCard({ listing }: Props) {
         </div>
       </div>
 
-      {/* CAR + OVERLAYED PLATE */}
-      <div className="relative w-full rounded-lg overflow-hidden border border-gold/30 bg-black aspect-[16/9]">
-        {/* Car image – change path if your asset is different */}
+      {/* CAR IMAGE WITH OVERLAID PLATE */}
+      <div className="relative w-full rounded-xl overflow-hidden border border-gold/20 bg-black">
+        {/* Car photo – from /public/car-rear.jpg */}
         <img
-  src="/car-rear.jpg"
-  alt="Supercar with number plate"
-  className="w-full h-full object-cover"
-/>
+          src="/car-rear.jpg"
+          alt="Car with number plate"
+          className="w-full h-auto object-cover"
+        />
 
-        {/* Plate overlay – always stays on the car, bottom-centre */}
-        <div className="absolute inset-0 flex flex-col items-center justify-end gap-1.5 pb-3 sm:pb-4">
-          {/* Front plate */}
-          <div className="bg-white text-black font-extrabold tracking-[0.12em] text-base sm:text-lg px-3 py-1.5 rounded-md border border-gray-400 shadow-sm w-[70%] max-w-[260px] text-center">
-            {registration}
-          </div>
-
-          {/* Rear plate */}
-          <div className="bg-yellow-300 text-black font-extrabold tracking-[0.12em] text-base sm:text-lg px-3 py-1.5 rounded-md border border-yellow-600 shadow-sm w-[70%] max-w-[260px] text-center">
+        {/* Plate locked to bumper using % from bottom + centered */}
+        <div className="absolute left-1/2 bottom-[9%] -translate-x-1/2">
+          <div className="bg-yellow-300 text-black font-extrabold tracking-[0.16em] text-lg sm:text-xl md:text-2xl px-4 sm:px-6 py-1.5 sm:py-2 rounded-md border border-yellow-700 shadow-[0_0_10px_rgba(0,0,0,0.7)]">
             {registration}
           </div>
         </div>

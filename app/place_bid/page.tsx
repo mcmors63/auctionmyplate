@@ -197,7 +197,7 @@ export default function PlaceBidPage() {
 
   // ----------------------------------------------------
   // HANDLE BUY NOW (with confirmation)
-// ----------------------------------------------------
+  // ----------------------------------------------------
   const handleBuyNow = async () => {
     setError(null);
     setSuccess(null);
@@ -217,7 +217,6 @@ export default function PlaceBidPage() {
       return;
     }
 
-    // ✅ Confirm before proceeding
     const ok = window.confirm(
       `Are you sure you want to use Buy Now and purchase ${listing.registration} for £${buyNowPrice.toLocaleString()}?\n\nThis will end the auction immediately and commit you to the purchase.`
     );
@@ -277,44 +276,29 @@ export default function PlaceBidPage() {
         </Link>
       </div>
 
-      {/* FIXED CAR IMAGE + PLATE */}
+            {/* PLATE HERO (no external image) */}
       <div className="max-w-4xl mx-auto mb-6">
-        <div
-          className="
-            relative 
-            overflow-hidden 
-            shadow-md 
-            rounded-xl 
-            mx-auto
-          "
-          style={{
-            width: "900px",
-            maxWidth: "100%",
-          }}
-        >
-          <img
-            src="/car-rear.jpg"
-            alt={listing.registration}
-            className="w-full h-auto object-cover"
-          />
+        <div className="relative mx-auto w-full max-w-[520px] aspect-[16/9] rounded-3xl border-[3px] border-black bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 shadow-2xl flex items-center justify-center overflow-hidden">
+          {/* Glow / road shadow */}
+          <div className="absolute inset-x-8 bottom-6 h-2 bg-black/40 blur-lg rounded-full" />
 
-          <div
-            className="absolute left-1/2 -translate-x-1/2"
-            style={{ bottom: "200px" }}
-          >
-            <div
-              className="bg-[#FFD500] border-2 border-black rounded-sm shadow-lg flex items-center justify-center"
-              style={{
-                width: "150px",
-                height: "50px",
-              }}
-            >
-              <p className="text-xl font-extrabold tracking-[0.15em]">
-                {listing.registration}
-              </p>
+          {/* Simple car hint: roof line */}
+          <div className="absolute inset-x-16 top-8 h-10 rounded-full border-2 border-slate-500/80" />
+
+          {/* Number plate */}
+          <div className="relative">
+            <div className="bg-[#FFD500] text-black font-extrabold tracking-[0.18em] text-lg sm:text-2xl px-6 sm:px-8 py-2 sm:py-3 rounded-md border-[3px] border-black shadow-[0_8px_0_rgba(0,0,0,0.6)] text-center">
+              {listing.registration}
             </div>
           </div>
+
+          {/* Front bumper bar behind plate */}
+          <div className="absolute inset-x-20 bottom-10 h-3 bg-slate-700 rounded-full opacity-70" />
         </div>
+
+        <p className="mt-2 text-center text-[10px] text-gray-500">
+          Registration shown for illustration &mdash; vehicle image is for display only.
+        </p>
       </div>
 
       {/* PANEL */}
@@ -345,12 +329,10 @@ export default function PlaceBidPage() {
             {bidsCount} {bidsCount === 1 ? "Bid" : "Bids"}
           </p>
 
-          {/* Only show positive "Reserve Met" */}
           {reserveMet && (
             <p className="mt-2 font-bold text-green-700">Reserve Met</p>
           )}
 
-          {/* Buy Now info */}
           {buyNowPrice && (
             <p className="mt-2 text-sm font-semibold text-blue-700">
               Buy Now available: £{buyNowPrice.toLocaleString()}
@@ -373,7 +355,6 @@ export default function PlaceBidPage() {
         <div className="bg-white border border-black rounded-xl p-6 shadow-sm space-y-4">
           <h3 className="text-xl font-bold">Place Your Bid</h3>
 
-          {/* DVLA FEE NOTICE */}
           <p className="text-sm text-gray-700">
             There will be an £80.00 fee added to all winning bids to process
             DVLA paperwork (auctionmyplate.co.uk has no affiliation with DVLA).

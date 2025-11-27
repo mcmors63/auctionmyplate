@@ -129,17 +129,43 @@ export default function ListingCard({ listing }: Props) {
         </div>
       </div>
 
-      {/* PLATE PREVIEW */}
-      <div className="flex flex-col items-center gap-1.5 py-2 bg-gray-100 rounded-lg border border-gold/20">
-        {/* Front plate */}
-        <div className="bg-white text-black font-extrabold tracking-[0.12em] text-lg sm:text-xl px-3 py-1.5 rounded-md border border-gray-400 shadow-sm w-full max-w-[260px] text-center">
-          {registration}
+      {/* VIRTUAL CAR + PLATE (no JPEG) */}
+      <div className="flex flex-col items-center gap-1.5 py-3 bg-gray-100 rounded-lg border border-gold/20">
+        <div className="relative w-full max-w-[260px] h-40 mx-auto">
+          {/* Car body */}
+          <div className="absolute inset-0 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border border-slate-700 shadow-inner" />
+
+          {/* Windscreen */}
+          <div className="absolute inset-x-[18%] top-[10%] h-[26%] rounded-t-[40%] bg-slate-600/80" />
+
+          {/* Bonnet */}
+          <div className="absolute inset-x-[10%] top-[30%] h-[18%] bg-slate-800 rounded-t-3xl border-t border-slate-600" />
+
+          {/* Bumper */}
+          <div className="absolute inset-x-[8%] bottom-[22%] h-[18%] bg-slate-950 rounded-t-2xl border border-slate-700" />
+
+          {/* Headlights */}
+          <div className="absolute left-[10%] bottom-[26%] w-[18%] h-[18%] rounded-xl bg-slate-300/90 shadow" />
+          <div className="absolute right-[10%] bottom-[26%] w-[18%] h-[18%] rounded-xl bg-slate-300/90 shadow" />
+
+          {/* Grill */}
+          <div className="absolute inset-x-[32%] bottom-[25%] h-[24%] bg-slate-900/80 rounded-md border border-slate-700" />
+
+          {/* Number plate on bumper */}
+          <div className="absolute left-1/2 bottom-[8%] -translate-x-1/2">
+            <div className="bg-yellow-300 text-black font-extrabold tracking-[0.18em] text-base sm:text-lg px-4 py-1.5 rounded-md border border-yellow-700 shadow-[0_0_10px_rgba(0,0,0,0.7)] text-center">
+              {registration}
+            </div>
+          </div>
+
+          {/* Wheels */}
+          <div className="absolute left-[8%] bottom-[4%] w-[18%] h-[22%] rounded-full bg-black shadow-inner" />
+          <div className="absolute right-[8%] bottom-[4%] w-[18%] h-[22%] rounded-full bg-black shadow-inner" />
         </div>
 
-        {/* Rear plate */}
-        <div className="bg-yellow-300 text-black font-extrabold tracking-[0.12em] text-lg sm:text-xl px-3 py-1.5 rounded-md border border-yellow-600 shadow-sm w-full max-w-[260px] text-center">
-          {registration}
-        </div>
+        <p className="text-[9px] text-gray-500">
+          Illustration only &mdash; vehicle image for display purposes.
+        </p>
       </div>
 
       {/* TIMER + BID INFO – STACK ON MOBILE */}

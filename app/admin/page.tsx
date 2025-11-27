@@ -120,7 +120,7 @@ export default function AdminPage() {
 
   // ------------------------------------------------------
   // APPROVE LISTING (starting_price included)
-  // ------------------------------------------------------
+// ------------------------------------------------------
   const approvePlate = async () => {
     if (!selectedPlate) return;
 
@@ -258,7 +258,7 @@ export default function AdminPage() {
 
   // ------------------------------------------------------
   // MARK LISTING SOLD -> creates Transaction row (calls API)
-// ------------------------------------------------------
+  // ------------------------------------------------------
   const markListingSold = async (listing: any) => {
     const salePriceStr = window.prompt(
       `Enter final sale price for ${listing.registration}:`,
@@ -434,24 +434,85 @@ export default function AdminPage() {
               key={p.$id}
               className="border rounded-xl p-5 bg-gray-50 shadow-sm mt-5"
             >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-2xl font-bold text-yellow-700">
+              <div className="flex justify-between items-start gap-4">
+                <div className="space-y-1 text-sm text-gray-800">
+                  <h2 className="text-2xl font-bold text-yellow-700 mb-1">
                     {p.registration}
                   </h2>
 
                   <p>
-                    <strong>Plate Type:</strong> {p.plate_type}
+                    <strong>Plate Type:</strong> {p.plate_type || "—"}
                   </p>
+
+                  {p.expiry_date && (
+                    <p>
+                      <strong>Retention Expiry:</strong>{" "}
+                      {formatDateTime(p.expiry_date)}
+                    </p>
+                  )}
+
                   <p>
-                    <strong>Reserve:</strong> £{p.reserve_price}
-                  </p>
-                  <p>
-                    <strong>Starting Price:</strong> £
-                    {p.starting_price || 0}
+                    <strong>Reserve:</strong>{" "}
+                    {formatMoney(
+                      typeof p.reserve_price === "number" ? p.reserve_price : 0
+                    )}
                   </p>
 
                   <p>
+                    <strong>Starting Price:</strong>{" "}
+                    {formatMoney(
+                      typeof p.starting_price === "number"
+                        ? p.starting_price
+                        : 0
+                    )}
+                  </p>
+
+                  <p>
+                    <strong>Buy Now:</strong>{" "}
+                    {typeof p.buy_now === "number"
+                      ? formatMoney(p.buy_now)
+                      : "—"}
+                  </p>
+
+                  <p>
+                    <strong>Relist until sold:</strong>{" "}
+                    {p.relist_until_sold ? "Yes" : "No"}
+                  </p>
+
+                  <p>
+                    <strong>Seller Email:</strong> {p.seller_email || "—"}
+                  </p>
+
+                  {p.description && (
+                    <p className="mt-1">
+                      <strong>Description:</strong> {p.description}
+                    </p>
+                  )}
+
+                  <div className="mt-2 text-xs text-gray-700 space-y-1">
+                    <p>
+                      <strong>Listing fee:</strong>{" "}
+                      {formatMoney(
+                        typeof p.listing_fee === "number" ? p.listing_fee : 0
+                      )}
+                    </p>
+                    <p>
+                      <strong>Commission rate:</strong>{" "}
+                      {typeof p.commission_rate === "number"
+                        ? `${p.commission_rate}%`
+                        : "—"}
+                    </p>
+                    <p>
+                      <strong>Estimated seller return:</strong>{" "}
+                      {formatMoney(
+                        typeof p.expected_return === "number"
+                          ? p.expected_return
+                          : 0
+                      )}
+                    </p>
+                  </div>
+
+                  <p className="mt-2">
                     <strong>Status:</strong>{" "}
                     {p.status === "queued" ? (
                       <span className="text-blue-700 font-bold">
@@ -471,217 +532,289 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => deleteListing(p.$id)}
-                  className="bg-red-600 text-white px-4 py-2 rounded-md font-semibold"
-                >
-                  Delete
-                </button>
-              </div>
-
-              <div className="mt-4 flex gap-3 items-center">
-                <a
-                  href={`/listing/${p.$id}`}
-                  target="_blank"
-                  className="inline-block bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700"
-                >
-                  View Full Listing
-                </a>
-
-                {activeTab === "live" && (
+                <div className="flex flex-col items-end gap-3">
                   <button
-                    onClick={() => markListingSold(p)}
-                    className="inline-block bg-emerald-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-emerald-700"
-                  >
-                    Mark as Sold
-                  </button>
-                )}
-              </div>
-
-              {activeTab === "pending" && (
-                <div className="mt-4 flex gap-4">
-                  <button
-                    onClick={() => setSelectedPlate(p)}
-                    className="bg-green-600 text-white px-4 py-2 rounded-md font-semibold"
-                  >
-                    Review & Approve
-                  </button>
-
-                  <button
-                    onClick={() => rejectPlate(p)}
+                    onClick={() => deleteListing(p.$id)}
                     className="bg-red-600 text-white px-4 py-2 rounded-md font-semibold"
                   >
-                    Reject
+                    Delete
                   </button>
+
+                  <a
+                    href={`/listing/${p.$id}`}
+                    target="_blank"
+                    className="inline-block bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700"
+                  >
+                    View Full Listing
+                  </a>
+
+                  {activeTab === "live" && (
+                    <button
+                      onClick={() => markListingSold(p)}
+                      className="inline-block bg-emerald-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-emerald-700"
+                    >
+                      Mark as Sold
+                    </button>
+                  )}
+
+                  {activeTab === "pending" && (
+                    <div className="flex flex-col gap-2 mt-2 w-full">
+                      <button
+                        onClick={() => setSelectedPlate(p)}
+                        className="bg-green-600 text-white py-2 px-4 rounded-md font-semibold w-full"
+                      >
+                        Review & Approve
+                      </button>
+
+                      <button
+                        onClick={() => rejectPlate(p)}
+                        className="bg-red-500 text-white py-2 px-4 rounded-md font-semibold w-full"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           ))}
 
         {/* TRANSACTIONS VIEW (Sold / Pending + Complete) */}
-{!loading && activeTab === "soldPending" && (
-  <div className="mt-6">
-    <h2 className="text-xl font-bold mb-2 text-yellow-700">
-      Sold / Pending (Paperwork &amp; Payment)
-    </h2>
+        {!loading && activeTab === "soldPending" && (
+          <div className="mt-6">
+            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+              Sold / Pending (Paperwork &amp; Payment)
+            </h2>
 
-    {transactions.length === 0 ? (
-      <p className="text-sm text-gray-600">
-        No sold plates waiting for paperwork or payment.
-      </p>
-    ) : (
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full text-left text-xs md:text-sm">
-          <thead className="bg-gray-100 text-gray-700">
-            <tr>
-              <th className="py-2 px-2">Reg</th>
-              <th className="py-2 px-2">Listing ID</th>
-              <th className="py-2 px-2">Seller Email</th>
-              <th className="py-2 px-2">Buyer Email</th>
-              <th className="py-2 px-2">Sale Price</th>
-              <th className="py-2 px-2">Commission</th>
-              <th className="py-2 px-2">Seller Payout</th>
-              <th className="py-2 px-2">DVLA Fee</th>
-              <th className="py-2 px-2">Payment Status</th>
-              <th className="py-2 px-2">Transaction Status</th>
-              <th className="py-2 px-2">Created</th>
-              <th className="py-2 px-2">Updated</th>
-              <th className="py-2 px-2 text-center">Docs</th>
-              <th className="py-2 px-2 text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {transactions.map((tx) => (
-              <tr key={tx.$id} className="hover:bg-yellow-50">
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.registration || "-"}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.listing_id || "-"}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.seller_email}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.buyer_email || "-"}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  £{(tx.sale_price ?? 0).toLocaleString("en-GB")}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  £{(tx.commission_amount ?? 0).toLocaleString("en-GB")} (
-                  {tx.commission_rate ?? 0}%)
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap font-semibold">
-                  £{(tx.seller_payout ?? 0).toLocaleString("en-GB")}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  £{(tx.dvla_fee ?? 0).toLocaleString("en-GB")}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.payment_status || "pending"}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.transaction_status || "pending"}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.created_at
-                    ? new Date(tx.created_at).toLocaleString("en-GB")
-                    : "-"}
-                </td>
-                <td className="py-2 px-2 whitespace-nowrap">
-                  {tx.updated_at
-                    ? new Date(tx.updated_at).toLocaleString("en-GB")
-                    : "-"}
-                </td>
-                <td className="py-2 px-2 text-center text-xs font-semibold">
-                  {Array.isArray(tx.documents) ? tx.documents.length : 0}
-                </td>
-                <td className="py-2 px-2 text-center space-x-2 whitespace-nowrap">
-                  <a
-                    href={`/admin/transaction/${tx.$id}`}
-                    className="text-xs text-blue-600 underline"
-                  >
-                    View
-                  </a>
-                    <button
-  type="button"
-  className="text-xs text-red-600 underline"
-  onClick={async () => {
-    // 1) Ask for a reason
-    const reasonInput = window.prompt(
-      "Reason for deleting / archiving this transaction? (This will be stored for record keeping.)",
-      ""
-    );
+            {transactions.length === 0 ? (
+              <p className="text-sm text-gray-600">
+                No sold plates waiting for paperwork or payment.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                <table className="min-w-full text-left text-xs md:text-sm">
+                  <thead className="bg-gray-100 text-gray-700">
+                    <tr>
+                      <th className="py-2 px-2">Reg</th>
+                      <th className="py-2 px-2">Listing ID</th>
+                      <th className="py-2 px-2">Seller Email</th>
+                      <th className="py-2 px-2">Buyer Email</th>
+                      <th className="py-2 px-2">Sale Price</th>
+                      <th className="py-2 px-2">Commission</th>
+                      <th className="py-2 px-2">Seller Payout</th>
+                      <th className="py-2 px-2">DVLA Fee</th>
+                      <th className="py-2 px-2">Payment Status</th>
+                      <th className="py-2 px-2">Transaction Status</th>
+                      <th className="py-2 px-2">Created</th>
+                      <th className="py-2 px-2">Updated</th>
+                      <th className="py-2 px-2 text-center">Docs</th>
+                      <th className="py-2 px-2 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {transactions.map((tx) => (
+                      <tr key={tx.$id} className="hover:bg-yellow-50">
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.registration || "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.listing_id || "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.seller_email}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.buyer_email || "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          £{(tx.sale_price ?? 0).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          £{(tx.commission_amount ?? 0).toLocaleString("en-GB")} (
+                          {tx.commission_rate ?? 0}%)
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap font-semibold">
+                          £{(tx.seller_payout ?? 0).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          £{(tx.dvla_fee ?? 0).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.payment_status || "pending"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.transaction_status || "pending"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.created_at
+                            ? new Date(tx.created_at).toLocaleString("en-GB")
+                            : "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.updated_at
+                            ? new Date(tx.updated_at).toLocaleString("en-GB")
+                            : "-"}
+                        </td>
+                        <td className="py-2 px-2 text-center text-xs font-semibold">
+                          {Array.isArray(tx.documents) ? tx.documents.length : 0}
+                        </td>
+                        <td className="py-2 px-2 text-center space-x-2 whitespace-nowrap">
+                          <a
+                            href={`/admin/transaction/${tx.$id}`}
+                            className="text-xs text-blue-600 underline"
+                          >
+                            View
+                          </a>
+                          <button
+                            type="button"
+                            className="text-xs text-red-600 underline"
+                            onClick={async () => {
+                              const reasonInput = window.prompt(
+                                "Reason for deleting / archiving this transaction? (This will be stored for record keeping.)",
+                                ""
+                              );
 
-    if (reasonInput === null) return; // cancelled
+                              if (reasonInput === null) return;
 
-    const reason = reasonInput.trim();
-    if (!reason) {
-      alert("Please enter a reason, or press Cancel to abort.");
-      return;
-    }
+                              const reason = reasonInput.trim();
+                              if (!reason) {
+                                alert(
+                                  "Please enter a reason, or press Cancel to abort."
+                                );
+                                return;
+                              }
 
-    try {
-      const res = await fetch("/api/admin/delete-transaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // MUST match the API: txId, not transactionId
-          txId: tx.$id,
-          reason,
-        }),
-      });
+                              try {
+                                const res = await fetch(
+                                  "/api/admin/delete-transaction",
+                                  {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      txId: tx.$id,
+                                      reason,
+                                    }),
+                                  }
+                                );
 
-      // Try to parse JSON only if the response is JSON
-      const contentType = res.headers.get("content-type") || "";
-      let data: any = null;
+                                const data = await res.json().catch(() => ({}));
+                                if (!res.ok || data.error) {
+                                  console.error(
+                                    "Delete transaction failed:",
+                                    data
+                                  );
+                                  alert(
+                                    data.error ||
+                                      "Failed to delete (archive) transaction."
+                                  );
+                                  return;
+                                }
 
-      if (contentType.includes("application/json")) {
-        data = await res.json().catch(() => null);
-      } else {
-        const text = await res.text().catch(() => "");
-        console.error(
-          "Non-JSON response from /api/admin/delete-transaction:",
-          {
-            status: res.status,
-            statusText: res.statusText,
-            body: text,
-          }
-        );
-      }
+                                setTransactions((prev) =>
+                                  prev.filter((row) => row.$id !== tx.$id)
+                                );
 
-      if (!res.ok || (data && data.error)) {
-        console.error("Delete transaction failed:", data);
-        alert(
-          (data && data.error) ||
-            `Failed to delete transaction (HTTP ${res.status}).`
-        );
-        return;
-      }
+                                alert("Transaction archived as deleted.");
+                              } catch (err) {
+                                console.error("Delete transaction failed:", err);
+                                alert("Failed to delete transaction.");
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
-      // ✅ Remove this row from the Sold / Pending list in the UI
-      setTransactions((prev) => prev.filter((row) => row.$id !== tx.$id));
+        {/* COMPLETE TAB */}
+        {!loading && activeTab === "complete" && (
+          <div className="mt-6">
+            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+              Completed Transactions
+            </h2>
 
-      alert("Transaction archived as deleted.");
-    } catch (err) {
-      console.error("Delete transaction failed:", err);
-      alert("Failed to delete transaction.");
-    }
-  }}
->
-  Delete
-</button>
-
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </div>
-)}
+            {transactions.length === 0 ? (
+              <p className="text-sm text-gray-600">
+                No completed transactions yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                <table className="min-w-full text-left text-xs md:text-sm">
+                  <thead className="bg-gray-100 text-gray-700">
+                    <tr>
+                      <th className="py-2 px-2">Reg</th>
+                      <th className="py-2 px-2">Listing ID</th>
+                      <th className="py-2 px-2">Seller Email</th>
+                      <th className="py-2 px-2">Buyer Email</th>
+                      <th className="py-2 px-2">Sale Price</th>
+                      <th className="py-2 px-2">Commission</th>
+                      <th className="py-2 px-2">Seller Payout</th>
+                      <th className="py-2 px-2">DVLA Fee</th>
+                      <th className="py-2 px-2">Payment Status</th>
+                      <th className="py-2 px-2">Transaction Status</th>
+                      <th className="py-2 px-2">Created</th>
+                      <th className="py-2 px-2">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {transactions.map((tx) => (
+                      <tr key={tx.$id} className="hover:bg-yellow-50">
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.registration || "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.listing_id || "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.seller_email}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.buyer_email || "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          £{(tx.sale_price ?? 0).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          £{(tx.commission_amount ?? 0).toLocaleString("en-GB")} (
+                          {tx.commission_rate ?? 0}%)
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap font-semibold">
+                          £{(tx.seller_payout ?? 0).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          £{(tx.dvla_fee ?? 0).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.payment_status || "pending"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.transaction_status || "pending"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.created_at
+                            ? new Date(tx.created_at).toLocaleString("en-GB")
+                            : "-"}
+                        </td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {tx.updated_at
+                            ? new Date(tx.updated_at).toLocaleString("en-GB")
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* REVIEW MODAL */}
         {selectedPlate && (

@@ -2,11 +2,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Client, Databases } from "appwrite";
 import AuctionTimer from "../../current-listings/AuctionTimer";
+import NumberPlate from "@/components/ui/NumberPlate";
 
 // -----------------------------
 // Appwrite client
@@ -28,7 +29,7 @@ type Listing = {
   $id: string;
   registration?: string;
   listing_id?: string;
-  description?: string;
+  description?: string;        // seller's text from submit form
   image_url?: string;
   status?: string;
   auction_start?: string | null;
@@ -43,6 +44,7 @@ type Listing = {
   expiry_date?: string | null;
   bids?: number | string | null;
   sold_via?: "auction" | "buy_now" | null;
+  interesting_fact?: string | null; // optional extra story from admin
   [key: string]: any;
 };
 
@@ -69,13 +71,12 @@ function formatDate(dateStr?: string | null): string | null {
 // -----------------------------
 export default function ListingDetailsPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
+  const id = params?.id;
 
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // POPUPS
   const [outbidPopup, setOutbidPopup] = useState<null | {
     oldBid: number;
     newBid: number;
@@ -85,8 +86,6 @@ export default function ListingDetailsPage() {
     oldEnd: string;
     newEnd: string;
   }>(null);
-
-  const id = params?.id;
 
   // LOAD LISTING
   useEffect(() => {
@@ -107,6 +106,7 @@ export default function ListingDetailsPage() {
       } catch (err) {
         console.error("Error loading listing:", err);
         setError("Listing not found.");
+        setListing(null);
       } finally {
         setLoading(false);
       }
@@ -119,7 +119,7 @@ export default function ListingDetailsPage() {
   useEffect(() => {
     if (!listing) return;
 
-    const unsubscribe = client.subscribe(
+    const unsub = client.subscribe(
       `databases.${DATABASE_ID}.collections.${LISTINGS_COLLECTION_ID}.documents.${listing.$id}`,
       (event) => {
         if (
@@ -154,18 +154,27 @@ export default function ListingDetailsPage() {
       }
     );
 
-    return () => unsubscribe();
+    return () => unsub();
   }, [listing]);
 
   // ----------------------------------------
-  // RENDERING
+  // SIMPLE STATES
   // ----------------------------------------
-  if (!listing)
+  if (loading) {
     return (
-      <div className="max-w-4xl mx-auto py-10 px-4">
-        <p className="text-red-600 text-2xl">Listing not found.</p>
+      <div className="min-h-screen bg-[#FFFBEA] flex items-center justify-center">
+        <p className="text-gray-700 text-sm">Loading listing…</p>
       </div>
     );
+  }
+
+  if (error || !listing) {
+    return (
+      <div className="min-h-screen bg-[#FFFBEA] flex items-center justify-center">
+        <p className="text-red-600 text-base">{error || "Listing not found."}</p>
+      </div>
+    );
+  }
 
   // ------------------ VALUES ------------------
   const {
@@ -181,6 +190,7 @@ export default function ListingDetailsPage() {
     expiry_date,
     bids,
     sold_via,
+    interesting_fact,
   } = listing;
 
   const isLive = status === "live";
@@ -214,31 +224,32 @@ export default function ListingDetailsPage() {
 
   const soldPrice = current_bid ?? buyNowPrice ?? 0;
 
+  // ------------------ RENDER ------------------
   return (
-    <div className="min-h-screen bg-[#FFFBEA] py-10 px-4 text-xl">
-      <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-md overflow-hidden">
+    <div className="min-h-screen bg-[#FFFBEA] py-10 px-4">
+      <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-md overflow-hidden text-sm md:text-base">
         {/* NAV */}
         <div className="flex justify-between items-center px-6 pt-4 pb-3">
           <Link
             href="/current-listings"
-            className="text-blue-700 underline text-xl"
+            className="text-blue-700 underline text-sm"
           >
             ← Back to listings
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 text-xs">
             {isSold && (
-              <span className="inline-flex items-center rounded-full bg-gray-200 px-4 py-1 font-semibold text-gray-700">
+              <span className="inline-flex items-center rounded-full bg-gray-200 px-3 py-1 font-semibold text-gray-700">
                 SOLD
               </span>
             )}
             {isComing && !isSold && (
-              <span className="inline-flex items-center rounded-full bg-yellow-100 px-4 py-1 font-semibold text-yellow-800">
+              <span className="inline-flex items-center rounded-full bg-yellow-100 px-3 py-1 font-semibold text-yellow-800">
                 Queued
               </span>
             )}
             {isLive && !isSold && (
-              <span className="inline-flex items-center rounded-full bg-green-100 px-4 py-1 font-semibold text-green-800">
+              <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 font-semibold text-green-800">
                 LIVE
               </span>
             )}
@@ -248,7 +259,7 @@ export default function ListingDetailsPage() {
         {/* IMAGE + OVERLAYED PLATE */}
         <div className="px-6 pb-6">
           <div className="relative w-full max-w-3xl mx-auto rounded-xl overflow-hidden shadow-lg bg-black">
-            {/* Keep the image itself simple: full width, auto height */}
+            {/* Car image */}
             <Image
               src="/car-rear.jpg"
               alt={`Rear of car with registration ${registration || ""}`}
@@ -258,31 +269,28 @@ export default function ListingDetailsPage() {
               priority
             />
 
-            {/* Plate anchored to bottom as a % of the image box */}
+            {/* Plate anchored to bumper – same component as Current Listings */}
             <div
               className="absolute left-1/2 -translate-x-1/2"
-              style={{
-                bottom: "7%", // tweak this up/down if needed
-              }}
+              style={{ bottom: "29%" }}
             >
               <div
-                className="flex items-center justify-center text-black font-bold"
                 style={{
-                  backgroundColor: "#FFD500",
-                  fontFamily: "'Charles Wright','Arial Black',sans-serif",
-                  letterSpacing: "0.17em",
-                  fontSize: "1.6rem",
-                  width: "160px",
-                  height: "48px",
-                  border: "4px solid black",
+                  transform: "scale(0.42)",
+                  transformOrigin: "center bottom",
                 }}
               >
-                {registration}
+                <NumberPlate
+                  reg={registration || ""}
+                  size="large"
+                  variant="rear"
+                  showBlueBand={true}
+                />
               </div>
             </div>
           </div>
 
-          {/* Ref + plate type under image if you want */}
+          {/* Ref + plate type under image */}
           <div className="mt-3 flex justify-between text-sm text-gray-600">
             <span>Listing ID: {displayRef}</span>
             {plate_type && <span>Type: {plate_type}</span>}
@@ -292,14 +300,14 @@ export default function ListingDetailsPage() {
         {/* SOLD BANNER */}
         {isSold && (
           <div className="mx-6 my-6 p-5 bg-green-600 text-white rounded-xl shadow text-center">
-            <p className="text-3xl font-extrabold">SOLD</p>
-            <p className="text-xl mt-2">
+            <p className="text-2xl font-extrabold">SOLD</p>
+            <p className="text-lg mt-2">
               Final Price:{" "}
               <span className="font-bold">
                 £{soldPrice.toLocaleString()}
               </span>
             </p>
-            <p className="text-lg opacity-90 mt-1">
+            <p className="text-sm opacity-90 mt-1">
               {sold_via === "buy_now"
                 ? "Bought via Buy Now"
                 : "Sold at Auction"}
@@ -308,11 +316,11 @@ export default function ListingDetailsPage() {
         )}
 
         {/* Auction Details */}
-        <div className="mt-6 mx-6 mb-10 bg-white rounded-xl border border-gray-200 shadow-sm p-8">
-          <h2 className="text-2xl font-bold mb-6">Auction Details</h2>
+        <div className="mt-2 mx-6 mb-8 bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <h2 className="text-lg font-bold mb-4">Auction Details</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-xl">
-            <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+            <div className="space-y-2">
               {!isSold ? (
                 <>
                   <p>
@@ -386,22 +394,34 @@ export default function ListingDetailsPage() {
           </div>
         </div>
 
-        {/* DESCRIPTION */}
-        <div className="mx-6 mb-8">
-          <h3 className="text-2xl font-bold mb-3">Description</h3>
-          <div className="border rounded-lg p-6 bg-gray-50 text-xl text-gray-800 whitespace-pre-line">
-            {description}
+        {/* DESCRIPTION + HISTORY */}
+        <div className="mx-6 mb-8 space-y-6">
+          <div>
+            <h3 className="text-lg font-bold mb-2">Description</h3>
+            <div className="border rounded-lg p-4 bg-gray-50 text-sm text-gray-800 whitespace-pre-line">
+              {description || "No description has been added yet."}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-base font-bold mb-2">
+              Plate history &amp; interesting facts
+            </h3>
+            <div className="border rounded-lg p-3 bg-white text-sm text-gray-800 whitespace-pre-line">
+              {interesting_fact ||
+                "No extra history or interesting facts have been added yet."}
+            </div>
           </div>
         </div>
 
         {/* CTA */}
-        <div className="mx-6 mb-8 flex flex-col sm:flex-row sm:justify-between gap-4">
+        <div className="mx-6 mb-8 flex flex-col sm:flex-row sm:justify-between gap-4 text-sm">
           {!isSold ? (
             isLive ? (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3">
                 <Link
                   href={`/place_bid?id=${listing.$id}`}
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-4 text-xl font-semibold text-white hover:bg-blue-700"
+                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
                 >
                   Place a bid
                 </Link>
@@ -409,31 +429,31 @@ export default function ListingDetailsPage() {
                 {buyNowPrice && (
                   <Link
                     href={`/buy_now?id=${listing.$id}`}
-                    className="inline-flex items-center justify-center rounded-md bg-green-600 px-6 py-4 text-xl font-semibold text-white hover:bg-green-700"
+                    className="inline-flex items-center justify-center rounded-md bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700"
                   >
                     Buy Now £{buyNowPrice.toLocaleString()}
                   </Link>
                 )}
 
                 {hasStartingPrice && current_bid == null && (
-                  <p className="text-sm text-gray-600">
+                  <p className="text-xs text-gray-600">
                     First bid must be at least £
                     {starting_price!.toLocaleString()}.
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-lg text-gray-700">
+              <p className="text-sm text-gray-700">
                 Bidding opens when this plate goes live.
               </p>
             )
           ) : (
-            <p className="text-lg font-semibold text-red-600">
+            <p className="text-sm font-semibold text-red-600">
               This auction has ended.
             </p>
           )}
 
-          <p className="text-lg text-gray-500 sm:text-right">
+          <p className="text-xs text-gray-500 sm:text-right">
             Plates will only be sold if the reserve has been met.
           </p>
         </div>

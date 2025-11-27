@@ -83,6 +83,8 @@ type Plate = {
   auction_end?: string;
   auction_start?: string;
   current_bid?: number;
+  relist_until_sold?: boolean;
+  withdraw_after_current?: boolean;
 };
 
 type Transaction = {
@@ -102,13 +104,13 @@ type Transaction = {
   created_at?: string;
   updated_at?: string;
 
-  // Seller workflow flags (set from Admin)
+  // Seller flags (match admin transaction page)
   seller_docs_requested?: boolean;
   seller_docs_received?: boolean;
   seller_payment_transferred?: boolean;
   seller_process_complete?: boolean;
 
-  // Buyer workflow flags (set from Admin)
+  // Buyer flags (match admin transaction page)
   buyer_info_requested?: boolean;
   buyer_info_received?: boolean;
   buyer_tax_mot_validated?: boolean;
@@ -154,18 +156,19 @@ export default function DashboardPage() {
   // Transactions
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  // Sell form
-  const [sellForm, setSellForm] = useState({
-    registration: "",
-    plate_type: "",
-    expiry_date: "",
-    description: "",
-    reserve_price: "",
-    starting_price: "",
-    buy_now: "",
-    owner_confirmed: false,
-    agreed_terms: false,
-  });
+ // Sell form
+const [sellForm, setSellForm] = useState({
+  registration: "",
+  plate_type: "",
+  expiry_date: "",
+  description: "",
+  reserve_price: "",
+  starting_price: "",
+  buy_now: "",
+  owner_confirmed: false,
+  agreed_terms: false,
+  keepListingUntilSold: false,
+});
 
   const [listingFee, setListingFee] = useState(0);
   const [commissionRate, setCommissionRate] = useState(0);
@@ -183,6 +186,10 @@ export default function DashboardPage() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
+  
+    // Delete account
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // --------------------------------------------------------
   // LOAD EVERYTHING (auth-only redirect, no loop)
@@ -408,6 +415,82 @@ export default function DashboardPage() {
     router.push("/login-or-register");
   };
 
+    // --------------------------------------------------------
+  // DELETE ACCOUNT
+  // --------------------------------------------------------
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+
+    // Hard confirmation
+    const sure = window.confirm(
+      "Are you sure you want to delete your account?\n\n" +
+        "This will remove your login and personal details from AuctionMyPlate.\n\n" +
+        "You CANNOT delete your account if:\n" +
+        "• You have a plate in a pending, queued or live auction\n" +
+        "• You have any transactions still in progress"
+    );
+
+    if (!sure) return;
+
+    setDeleteError("");
+    setDeleteLoading(true);
+
+    try {
+      // 🔍 Client-side safety check – active plates
+      const hasActivePlate = plates.some((p) =>
+        ["pending", "queued", "live"].includes(
+          (p.status || "").toString().toLowerCase()
+        )
+      );
+
+      if (hasActivePlate) {
+        setDeleteError(
+          "You still have a plate in an active auction (pending, queued or live). " +
+            "Wait until it has finished before deleting your account."
+        );
+        setDeleteLoading(false);
+        return;
+      }
+
+      // 🔍 Client-side safety check – active transactions
+      if (activeTransactions.length > 0) {
+        setDeleteError(
+          "You have transactions still in progress. Once all sales and purchases are completed, you can delete your account."
+        );
+        setDeleteLoading(false);
+        return;
+      }
+
+      // 🔥 Call server to perform the real deletion (double-checks again)
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.$id,
+          email: user.email,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({} as any));
+
+      if (!res.ok || (data as any).error) {
+        setDeleteError(
+          (data as any).error || "Failed to delete account. Please try again."
+        );
+        setDeleteLoading(false);
+        return;
+      }
+
+      alert("Your account has been deleted. Thank you for using AuctionMyPlate.");
+      router.push("/");
+    } catch (err: any) {
+      console.error("delete-account error", err);
+      setDeleteError(err?.message || "Failed to delete account.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   // --------------------------------------------------------
   // FEE CALCULATOR
   // --------------------------------------------------------
@@ -605,6 +688,8 @@ export default function DashboardPage() {
           expected_return: Math.round(Number(expectedReturn)),
           owner_confirmed: sellForm.owner_confirmed,
           agreed_terms: sellForm.agreed_terms,
+          relist_until_sold: sellForm.keepListingUntilSold,
+          withdraw_after_current: false,
           status: "pending",
           seller_email: user.email,
           created_at: new Date().toISOString(),
@@ -666,6 +751,7 @@ export default function DashboardPage() {
         reserve_price: "",
         starting_price: "",
         buy_now: "",
+        keepListingUntilSold: false,
         owner_confirmed: false,
         agreed_terms: false,
       });
@@ -720,14 +806,6 @@ export default function DashboardPage() {
         .filter((tx) => !isFinishedTransaction(tx))
     : [];
 
-      const activeSales = userEmail
-    ? activeTransactions.filter((tx) => tx.seller_email === userEmail)
-    : [];
-
-  const activePurchases = userEmail
-    ? activeTransactions.filter((tx) => tx.buyer_email === userEmail)
-    : [];
-
   // History plates (only completed auctions)
   const historyPlates = plates.filter(
     (p) =>
@@ -735,6 +813,9 @@ export default function DashboardPage() {
       p.status === "not_sold" ||
       p.status === "completed"
   );
+  
+  // Approved / queued plates for the Approved / Queued tab
+  const queuedPlates = plates.filter((p) => p.status === "queued");
 
   // --------------------------------------------------------
   // LOADING STATE
@@ -829,394 +910,445 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {/* PROFILE TAB */}
-        {activeTab === "profile" && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-bold text-yellow-700">
-              Personal Details
-            </h2>
+                {/* PROFILE TAB */}
+{activeTab === "profile" && (
+  <div className="space-y-6">
+    <h2 className="text-xl font-bold text-yellow-700">
+      Personal Details
+    </h2>
 
-            {!profile ? (
-              <p className="text-gray-600">
-                No profile found. Please contact support.
-              </p>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    ["first_name", "First Name"],
-                    ["surname", "Surname"],
-                    ["house", "House"],
-                    ["street", "Street"],
-                    ["town", "Town"],
-                    ["county", "County"],
-                    ["postcode", "Postcode"],
-                    ["phone", "Phone"],
-                  ].map(([key, label]) => (
-                    <div key={key}>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
-                        {label}
-                      </label>
-                      <input
-                        type="text"
-                        name={key}
-                        value={(profile as any)[key] || ""}
-                        onChange={handleProfileChange}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
-                      />
-                    </div>
-                  ))}
+    {!profile ? (
+      <p className="text-gray-600">
+        No profile found. Please contact support.
+      </p>
+    ) : (
+      <>
+        {/* Personal info fields */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            ["first_name", "First Name"],
+            ["surname", "Surname"],
+            ["house", "House"],
+            ["street", "Street"],
+            ["town", "Town"],
+            ["county", "County"],
+            ["postcode", "Postcode"],
+            ["phone", "Phone"],
+          ].map(([key, label]) => (
+            <div key={key}>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                {label}
+              </label>
+              <input
+                type="text"
+                name={key}
+                value={(profile as any)[key] || ""}
+                onChange={handleProfileChange}
+                className="border rounded-md w-full px-3 py-2 text-sm"
+              />
+            </div>
+          ))}
 
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">
-                      Email (login)
-                    </label>
-                    <input
-                      type="email"
-                      value={profile.email || user?.email || ""}
-                      disabled
-                      className="border rounded-md w-full px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleSaveProfile}
-                  disabled={savingProfile}
-                  className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
-                >
-                  {savingProfile ? "Saving…" : "Save Changes"}
-                </button>
-
-                {/* Change Password */}
-                <div className="mt-10 border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-3 text-yellow-700">
-                    Change Password
-                  </h3>
-
-                  {passwordError && (
-                    <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-3 border border-red-200">
-                      {passwordError}
-                    </p>
-                  )}
-                  {passwordSuccess && (
-                    <p className="bg-green-50 text-green-700 text-sm rounded-md px-3 py-2 mb-3 border border-green-200">
-                      {passwordSuccess}
-                    </p>
-                  )}
-
-                  <form
-                    onSubmit={handlePasswordChange}
-                    className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                  >
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
-                        Current Password
-                      </label>
-                      <input
-                        type="password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
-                        New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Must include letters &amp; numbers, min 8 characters.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
-                        Confirm New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
-                      />
-                    </div>
-
-                    <div className="flex items-end">
-                      <button
-                        type="submit"
-                        disabled={passwordLoading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
-                      >
-                        {passwordLoading ? "Updating…" : "Update Password"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                {/* Supporting Documents */}
-                <div className="mt-10 border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-3 text-yellow-700">
-                    Supporting Documents
-                  </h3>
-                  <SellerDocumentsUploader
-                    sellerId={profile.$id}
-                    transactionId={null}
-                  />
-                </div>
-              </>
-            )}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Email (login)
+            </label>
+            <input
+              type="email"
+              value={profile.email || user?.email || ""}
+              disabled
+              className="border rounded-md w-full px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+            />
           </div>
-        )}
+        </div>
 
-        {/* SELL TAB */}
-        {activeTab === "sell" && (
-          <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <h2 className="text-xl font-bold text-yellow-700">Sell a Plate</h2>
-              <p className="text-xs text-gray-600">
-                Listing is free. Fees only apply if your plate sells.
+        <button
+          onClick={handleSaveProfile}
+          disabled={savingProfile}
+          className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
+        >
+          {savingProfile ? "Saving…" : "Save Changes"}
+        </button>
+
+        {/* Change Password */}
+        <div className="mt-10 border-t pt-6">
+          <h3 className="text-lg font-semibold mb-3 text-yellow-700">
+            Change Password
+          </h3>
+
+          {passwordError && (
+            <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-3 border border-red-200">
+              {passwordError}
+            </p>
+          )}
+          {passwordSuccess && (
+            <p className="bg-green-50 text-green-700 text-sm rounded-md px-3 py-2 mb-3 border border-green-200">
+              {passwordSuccess}
+            </p>
+          )}
+
+          <form
+            onSubmit={handlePasswordChange}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                Current Password
+              </label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="border rounded-md w-full px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                New Password
+              </label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="border rounded-md w-full px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Must include letters &amp; numbers, min 8 characters.
               </p>
             </div>
 
-            {sellError && (
-              <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-2 border border-red-200">
-                {sellError}
-              </p>
-            )}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                Confirm New Password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="border rounded-md w-full px-3 py-2 text-sm"
+              />
+            </div>
 
-            <form onSubmit={handleSellSubmit} className="space-y-5">
-              {/* REGISTRATION + PLATE PREVIEW */}
-              <div className="space-y-3">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Registration
-                </label>
-
-                <input
-                  name="registration"
-                  value={sellForm.registration}
-                  onChange={handleSellChange}
-                  className="border rounded-md w-full px-3 py-2 text-sm"
-                  placeholder="e.g. AB12 CDE"
-                />
-
-                <div className="flex justify-center pt-3 pb-2">
-                  <NumberPlate
-                    reg={sellForm.registration || ""}
-                    size="large"
-                    variant="rear"
-                    showBlueBand={true}
-                  />
-                </div>
-              </div>
-
-              {/* PLATE TYPE */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Plate Type
-                </label>
-                <select
-                  name="plate_type"
-                  value={sellForm.plate_type}
-                  onChange={handleSellChange}
-                  className="border rounded-md w-full px-3 py-2 text-sm"
-                >
-                  <option value="">Select type</option>
-                  <option value="vehicle">On a Vehicle</option>
-                  <option value="retention">On a Retention Certificate</option>
-                </select>
-              </div>
-
-              {/* RETENTION DATE (conditional) */}
-              {sellForm.plate_type === "retention" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">
-                      Retention Expiry Date
-                    </label>
-                    <input
-                      type="date"
-                      name="expiry_date"
-                      value={sellForm.expiry_date}
-                      onChange={handleSellChange}
-                      className="border rounded-md w-full px-3 py-2 text-sm"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Must be a valid future date.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* DESCRIPTION */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Description (optional)
-                </label>
-                <textarea
-                  name="description"
-                  value={sellForm.description}
-                  onChange={handleSellChange}
-                  className="border rounded-md w-full px-3 py-2 text-sm"
-                  rows={4}
-                  placeholder="Tell buyers why this plate is special."
-                />
-              </div>
-
-              {/* PRICE GRID WITH EXPLANATIONS */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
-                {/* RESERVE PRICE */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Reserve Price (£)
-                  </label>
-
-                  <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
-                    This is the minimum amount you will accept for the plate. If
-                    bidding does not reach this value, the plate will not be
-                    sold.
-                  </div>
-
-                  <input
-                    type="number"
-                    name="reserve_price"
-                    value={sellForm.reserve_price}
-                    onChange={handleSellChange}
-                    className="border rounded-md w-full px-3 py-2 text-sm"
-                    min={300}
-                    step="0.01"
-                    placeholder="Minimum reserve £300"
-                  />
-                </div>
-
-                {/* STARTING PRICE */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Starting Price (£){" "}
-                    <span className="text-gray-400">(optional)</span>
-                  </label>
-
-                  <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
-                    This is the starting amount for bidding. Leave empty for £0
-                    (recommended).
-                  </div>
-
-                  <input
-                    type="number"
-                    name="starting_price"
-                    value={sellForm.starting_price}
-                    onChange={handleSellChange}
-                    className="border rounded-md w-full px-3 py-2 text-sm"
-                    min={0}
-                    step="0.01"
-                    placeholder="Leave empty for £0"
-                  />
-                </div>
-
-                {/* BUY NOW */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Buy Now (£)
-                  </label>
-
-                  <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
-                    This is the price you are willing to sell the plate for
-                    instantly. If a buyer uses Buy Now, the auction ends
-                    immediately.
-                  </div>
-
-                  <input
-                    type="number"
-                    name="buy_now"
-                    value={sellForm.buy_now}
-                    onChange={handleSellChange}
-                    className="border rounded-md w-full px-3 py-2 text-sm"
-                    min={0}
-                    step="0.01"
-                  />
-                </div>
-
-                {/* SUMMARY BOX */}
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700">
-                  <p>
-                    Listing fee: <strong>£{listingFee.toFixed(2)}</strong>
-                  </p>
-                  <p>
-                    Commission:{" "}
-                    <strong>{commissionRate.toFixed(1)}%</strong>
-                  </p>
-                  <p>
-                    Expected return:{" "}
-                    <strong>
-                      £
-                      {expectedReturn > 0
-                        ? expectedReturn.toFixed(2)
-                        : "0.00"}
-                    </strong>
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-xs text-gray-600 mt-1">
-                <strong>Note:</strong> These calculations are based on your
-                reserve price and will be recalculated when your plate is sold.
-              </p>
-
-              {/* CHECKBOXES */}
-              <div className="space-y-2 text-xs text-gray-700">
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    name="owner_confirmed"
-                    checked={sellForm.owner_confirmed}
-                    onChange={handleSellChange}
-                    className="mt-1"
-                  />
-                  <span>
-                    I confirm I am the legal owner or have authority to sell
-                    this registration.
-                  </span>
-                </label>
-
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    name="agreed_terms"
-                    checked={sellForm.agreed_terms}
-                    onChange={handleSellChange}
-                    className="mt-1"
-                  />
-                  <span>
-                    I agree to the{" "}
-                    <button
-                      type="button"
-                      className="text-blue-600 underline"
-                      onClick={() => setShowTerms(true)}
-                    >
-                      Terms &amp; Conditions
-                    </button>
-                    .
-                  </span>
-                </label>
-              </div>
-
-              {/* SUBMIT BUTTON */}
+            <div className="flex items-end">
               <button
                 type="submit"
-                disabled={sellSubmitting}
-                className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
+                disabled={passwordLoading}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
               >
-                {sellSubmitting ? "Submitting…" : "Create Listing"}
+                {passwordLoading ? "Updating…" : "Update Password"}
               </button>
-            </form>
+            </div>
+          </form>
+        </div>
+
+        {/* 🔴 Delete Account – now just after password */}
+        <div className="mt-10 border-t pt-6">
+          <h3 className="text-lg font-semibold mb-3 text-red-700">
+            Delete Account
+          </h3>
+          <p className="text-xs text-gray-600 mb-3">
+            Deleting your account will permanently remove your login and
+            personal details from AuctionMyPlate.
+            <br />
+            <strong>You cannot delete your account if:</strong>
+          </p>
+          <ul className="text-xs text-gray-600 list-disc ml-5 mb-3">
+            <li>You have a plate in a pending, queued or live auction.</li>
+            <li>You have any transactions still in progress.</li>
+          </ul>
+
+          {deleteError && (
+            <p className="bg-red-50 text-red-700 text-xs rounded-md px-3 py-2 mb-3 border border-red-200">
+              {deleteError}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={handleDeleteAccount}
+            disabled={deleteLoading}
+            className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-xs font-semibold disabled:opacity-50"
+          >
+            {deleteLoading ? "Deleting…" : "Delete my account"}
+          </button>
+        </div>
+
+        {/* Supporting Documents */}
+        <div className="mt-10 border-t pt-6">
+          <h3 className="text-lg font-semibold mb-3 text-yellow-700">
+            Supporting Documents
+          </h3>
+          <SellerDocumentsUploader
+            sellerId={profile.$id}
+            transactionId={null}
+          />
+        </div>
+      </>
+    )}
+  </div>
+)}
+              
+        {/* SELL TAB */}
+{activeTab === "sell" && (
+  <div className="space-y-6">
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <h2 className="text-xl font-bold text-yellow-700">Sell a Plate</h2>
+      <p className="text-xs text-gray-600">
+        Listing is free. Fees only apply if your plate sells.
+      </p>
+    </div>
+
+    {sellError && (
+      <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-2 border border-red-200">
+        {sellError}
+      </p>
+    )}
+
+    <form onSubmit={handleSellSubmit} className="space-y-5">
+      {/* REGISTRATION + PLATE PREVIEW */}
+      <div className="space-y-3">
+        <label className="block text-xs font-semibold text-gray-600 mb-1">
+          Registration
+        </label>
+
+        <input
+          name="registration"
+          value={sellForm.registration}
+          onChange={handleSellChange}
+          className="border rounded-md w-full px-3 py-2 text-sm"
+          placeholder="e.g. AB12 CDE"
+        />
+
+        <div className="flex justify-center pt-3 pb-2">
+          <NumberPlate
+            reg={sellForm.registration || ""}
+            size="large"
+            variant="rear"
+            showBlueBand={true}
+          />
+        </div>
+      </div>
+
+      {/* PLATE TYPE */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">
+          Plate Type
+        </label>
+        <select
+          name="plate_type"
+          value={sellForm.plate_type}
+          onChange={handleSellChange}
+          className="border rounded-md w-full px-3 py-2 text-sm"
+        >
+          <option value="">Select type</option>
+          <option value="vehicle">On a Vehicle</option>
+          <option value="retention">On a Retention Certificate</option>
+        </select>
+      </div>
+
+      {/* RETENTION DATE (conditional) */}
+      {sellForm.plate_type === "retention" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Retention Expiry Date
+            </label>
+            <input
+              type="date"
+              name="expiry_date"
+              value={sellForm.expiry_date}
+              onChange={handleSellChange}
+              className="border rounded-md w-full px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Must be a valid future date.
+            </p>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* DESCRIPTION */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">
+          Description (optional)
+        </label>
+        <textarea
+          name="description"
+          value={sellForm.description}
+          onChange={handleSellChange}
+          className="border rounded-md w-full px-3 py-2 text-sm"
+          rows={4}
+          placeholder="Tell buyers why this plate is special."
+        />
+      </div>
+
+      {/* PRICE GRID WITH EXPLANATIONS */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+        {/* RESERVE PRICE */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">
+            Reserve Price (£)
+          </label>
+
+          <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
+            This is the minimum amount you will accept for the plate. If
+            bidding does not reach this value, the plate will not be sold.
+          </div>
+
+          <input
+            type="number"
+            name="reserve_price"
+            value={sellForm.reserve_price}
+            onChange={handleSellChange}
+            className="border rounded-md w-full px-3 py-2 text-sm"
+            min={300}
+            step="0.01"
+            placeholder="Minimum reserve £300"
+          />
+        </div>
+
+        {/* STARTING PRICE */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">
+            Starting Price (£){" "}
+            <span className="text-gray-400">(optional)</span>
+          </label>
+
+          <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
+            This is the starting amount for bidding. Leave empty for £0
+            (recommended).
+          </div>
+
+          <input
+            type="number"
+            name="starting_price"
+            value={sellForm.starting_price}
+            onChange={handleSellChange}
+            className="border rounded-md w-full px-3 py-2 text-sm"
+            min={0}
+            step="0.01"
+            placeholder="Leave empty for £0"
+          />
+        </div>
+
+        {/* BUY NOW */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">
+            Buy Now (£)
+          </label>
+
+          <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
+            This is the price you are willing to sell the plate for
+            instantly. If a buyer uses Buy Now, the auction ends
+            immediately.
+          </div>
+
+          <input
+            type="number"
+            name="buy_now"
+            value={sellForm.buy_now}
+            onChange={handleSellChange}
+            className="border rounded-md w-full px-3 py-2 text-sm"
+            min={0}
+            step="0.01"
+          />
+        </div>
+
+        {/* SUMMARY BOX */}
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700">
+          <p>
+            Listing fee: <strong>£{listingFee.toFixed(2)}</strong>
+          </p>
+          <p>
+            Commission:{" "}
+            <strong>{commissionRate.toFixed(1)}%</strong>
+          </p>
+          <p>
+            Expected return:{" "}
+            <strong>
+              £
+              {expectedReturn > 0
+                ? expectedReturn.toFixed(2)
+                : "0.00"}
+            </strong>
+          </p>
+        </div>
+      </div>
+
+      <p className="text-xs text-gray-600 mt-1">
+        <strong>Note:</strong> These calculations are based on your reserve
+        price and will be recalculated when your plate is sold.
+      </p>
+
+      {/* CHECKBOXES */}
+      <div className="space-y-2 text-xs text-gray-700">
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="owner_confirmed"
+            checked={sellForm.owner_confirmed}
+            onChange={handleSellChange}
+            className="mt-1"
+          />
+          <span>
+            I confirm I am the legal owner or have authority to sell this
+            registration.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="agreed_terms"
+            checked={sellForm.agreed_terms}
+            onChange={handleSellChange}
+            className="mt-1"
+          />
+          <span>
+            I agree to the{" "}
+            <button
+              type="button"
+              className="text-blue-600 underline"
+              onClick={() => setShowTerms(true)}
+            >
+              Terms &amp; Conditions
+            </button>
+            .
+          </span>
+        </label>
+
+        {/* KEEP LISTING UNTIL SOLD */}
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="keepListingUntilSold"
+            checked={sellForm.keepListingUntilSold}
+            onChange={handleSellChange}
+            className="mt-1"
+          />
+          <span>
+            Keep listing this plate in each weekly auction until it sells.
+            <br />
+            <span className="text-xs text-gray-500">
+              If it doesn’t sell, it will automatically enter the next
+              auction unless you request to withdraw it from your dashboard.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      {/* SUBMIT BUTTON */}
+      <button
+        type="submit"
+        disabled={sellSubmitting}
+        className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
+      >
+        {sellSubmitting ? "Submitting…" : "Create Listing"}
+      </button>
+    </form>
+  </div>
+)}
 
         {/* AWAITING TAB */}
         {activeTab === "awaiting" && (
@@ -1224,6 +1356,11 @@ export default function DashboardPage() {
             <h2 className="text-xl font-bold mb-2 text-yellow-700">
               Awaiting Approval
             </h2>
+            <p className="text-sm text-gray-600 mb-2">
+              These listings have been submitted and are waiting for the admin team
+              to review and approve them.
+            </p>
+
             {awaitingPlates.length === 0 ? (
               <p className="text-gray-600 text-sm text-center">
                 You have no listings awaiting approval.
@@ -1233,22 +1370,43 @@ export default function DashboardPage() {
                 {awaitingPlates.map((p) => (
                   <div
                     key={p.$id}
-                    className="border border-gray-200 rounded-xl p-4 bg-gray-50"
+                    className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
                   >
-                    <div className="flex justify-between items-center mb-1">
-                      <h3 className="text-lg font-bold text-yellow-700">
-                        {p.registration}
-                      </h3>
-                      <span className="text-xs font-semibold px-2 py-1 rounded bg-yellow-100 text-yellow-800">
-                        Pending
+                    <div className="flex justify-between items-center mb-2">
+                      <div>
+                        <h3 className="text-lg font-bold text-yellow-700">
+                          {p.registration}
+                        </h3>
+                        <p className="text-xs text-gray-600">
+                          Status: <span className="font-semibold text-orange-700">Pending review</span>
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 rounded-md text-xs font-semibold bg-yellow-100 text-yellow-800">
+                        Awaiting Approval
                       </span>
                     </div>
-                    <p className="text-sm text-gray-700">
-                      Reserve: £{p.reserve_price}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Status: Awaiting admin approval.
-                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-700 mt-2">
+                      <p>
+                        <strong>Reserve:</strong> £{p.reserve_price.toLocaleString("en-GB")}
+                      </p>
+                      <p>
+                        <strong>Starting:</strong> £
+                        {(p.starting_price ?? 0).toLocaleString("en-GB")}
+                      </p>
+                      <p>
+                        <strong>Buy Now:</strong>{" "}
+                        {p.buy_now
+                          ? `£${p.buy_now.toLocaleString("en-GB")}`
+                          : "Not set"}
+                      </p>
+                    </div>
+
+                    {p.description && (
+                      <p className="mt-2 text-xs text-gray-600">
+                        <strong>Your description:</strong> {p.description}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1263,21 +1421,24 @@ export default function DashboardPage() {
               Approved / Queued Listings
             </h2>
 
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 mb-1">
               These plates have been approved by admin and will enter the next
               weekly auction.
             </p>
+            <p className="text-xs text-gray-500">
+              You currently have{" "}
+              <strong>{queuedPlates.length}</strong> plate
+              {queuedPlates.length === 1 ? "" : "s"} queued.
+            </p>
 
-            {approvedPlates.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
+            {queuedPlates.length === 0 ? (
+              <p className="text-gray-600 text-sm text-center mt-4">
                 You have no approved listings waiting for the next auction.
               </p>
             ) : (
-              <div className="grid gap-4">
-                {approvedPlates.map((p) => {
+              <div className="grid gap-4 mt-2">
+                {queuedPlates.map((p) => {
                   const now = new Date();
-
-                  // Fallback to the next weekly auction window if explicit dates are missing
                   const { nextStart, nextEnd } = getAuctionWindow(now);
 
                   const start = p.auction_start
@@ -1288,6 +1449,7 @@ export default function DashboardPage() {
                     ? new Date(p.auction_end)
                     : nextEnd;
 
+                  // If the auction hasn't started yet, allow withdraw
                   const canWithdraw = !!(start && now < start);
 
                   return (
@@ -1295,31 +1457,55 @@ export default function DashboardPage() {
                       key={p.$id}
                       className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
                     >
+                      {/* Header */}
                       <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-xl font-bold text-yellow-700">
-                          {p.registration}
-                        </h3>
+                        <div>
+                          <h3 className="text-xl font-bold text-yellow-700">
+                            {p.registration}
+                          </h3>
+                          <p className="text-xs text-gray-600">
+                            Status:{" "}
+                            <span className="font-semibold text-blue-700">
+                              Approved / queued for next auction
+                            </span>
+                          </p>
+                        </div>
 
                         <span className="px-3 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-800">
                           Approved / Queued
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700">
+                      {/* Plate visual */}
+                      <div className="flex justify-center mb-3">
+                        <NumberPlate
+                          reg={p.registration}
+                          size="large"
+                          variant="rear"
+                          showBlueBand={true}
+                        />
+                      </div>
+
+                      {/* Price info */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700 mb-2">
                         <p>
-                          <strong>Reserve:</strong> £{p.reserve_price}
+                          <strong>Reserve:</strong> £
+                          {p.reserve_price.toLocaleString("en-GB")}
                         </p>
                         <p>
-                          <strong>Starting Price:</strong> £
-                          {p.starting_price || 0}
+                          <strong>Starting price:</strong> £
+                          {(p.starting_price ?? 0).toLocaleString("en-GB")}
                         </p>
                         <p>
                           <strong>Buy Now:</strong>{" "}
-                          {p.buy_now ? `£${p.buy_now}` : "—"}
+                          {p.buy_now
+                            ? `£${p.buy_now.toLocaleString("en-GB")}`
+                            : "Not set"}
                         </p>
                       </div>
 
-                      <div className="mt-3 text-sm text-gray-700">
+                      {/* Auction window & timer */}
+                      <div className="mt-2 text-sm text-gray-700">
                         <strong>Auction Window: </strong>
                         {start
                           ? start.toLocaleString("en-GB", {
@@ -1344,34 +1530,63 @@ export default function DashboardPage() {
                         />
                       </div>
 
+                      {/* Relist setting info */}
+                      <div className="mt-3 text-xs text-gray-600 space-y-1">
+                        <p>
+                          <strong>Relist setting:</strong>{" "}
+                          {p.relist_until_sold
+                            ? "This plate will be relisted in the next weekly auction if it does not sell."
+                            : "This plate will not be automatically relisted after the auction."}
+                        </p>
+                      </div>
+
+                      {/* Withdraw action (only before auction starts) */}
                       {canWithdraw && (
                         <button
-                          className="mt-4 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md text-sm"
+                          type="button"
+                          className="mt-4 inline-flex items-center px-4 py-2 rounded-md bg-red-500 hover:bg-red-600 text-white text-sm font-semibold"
                           onClick={async () => {
-                            try {
-                              const res = await fetch("/api/withdraw-listing", {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify({ listingId: p.$id }),
-                              });
+                            if (
+                              !window.confirm(
+                                "Are you sure you want to withdraw this plate from the upcoming auction?"
+                              )
+                            ) {
+                              return;
+                            }
 
-                              if (res.ok) {
-                                setApprovedPlates((prev) =>
-                                  prev.filter((x) => x.$id !== p.$id)
+                            try {
+                              const res = await fetch(
+                                "/api/withdraw-listing",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({ listingId: p.$id }),
+                                }
+                              );
+
+                              const data = await res
+                                .json()
+                                .catch(() => ({ error: "Invalid response" }));
+
+                              if (!res.ok || data.error) {
+                                alert(
+                                  data.error ||
+                                    "Failed to withdraw listing. Please try again."
                                 );
-                                alert("Listing withdrawn successfully.");
-                              } else {
-                                alert("Failed to withdraw listing.");
+                                return;
                               }
+
+                              // simplest: refresh page so all tabs re-load correctly
+                              window.location.reload();
                             } catch (err) {
-                              console.error(err);
-                              alert("Something went wrong.");
+                              console.error("withdraw-listing error", err);
+                              alert("Something went wrong withdrawing listing.");
                             }
                           }}
                         >
-                          Withdraw from Auction
+                          Withdraw from upcoming auction
                         </button>
                       )}
                     </div>
@@ -1382,48 +1597,206 @@ export default function DashboardPage() {
           </div>
         )}
 
+
         {/* LIVE TAB */}
-        {activeTab === "live" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">
-              Live Listings
-            </h2>
-            {livePlates.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
-                You currently have no live auction listings.
-              </p>
-            ) : (
-              <div className="grid gap-4">
-                {livePlates.map((p) => (
-                  <div
-                    key={p.$id}
-                    className="border border-gray-200 rounded-xl p-4 bg-gray-50"
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <h3 className="text-lg font-bold text-yellow-700">
-                        {p.registration}
-                      </h3>
-                      <span className="text-xs font-semibold px-2 py-1 rounded bg-green-100 text-green-800">
-                        Live
-                      </span>
-                    </div>
+{activeTab === "live" && (
+  <div className="space-y-4">
+    <h2 className="text-xl font-bold mb-2 text-yellow-700">
+      Live Listings
+    </h2>
 
-                    <p className="text-sm text-gray-700">
-                      Current highest bid: £{p.current_bid || 0}
-                    </p>
+    <p className="text-sm text-gray-600 mb-4">
+      These plates are currently in the live weekly auction. You can request
+      that a plate is withdrawn after this auction finishes. If{" "}
+      <strong>“keep listing until sold”</strong> was selected, the plate will
+      normally roll into the next auction automatically unless you request
+      withdrawal.
+    </p>
 
-                    <p className="text-sm text-gray-700 mt-1">
-                      Auction ends:{" "}
-                      {p.auction_end
-                        ? new Date(p.auction_end).toLocaleString("en-GB")
-                        : "—"}
-                    </p>
-                  </div>
-                ))}
+    {livePlates.length === 0 ? (
+      <p className="text-gray-600 text-sm text-center">
+        You currently have no plates in a live auction.
+      </p>
+    ) : (
+      <div className="grid gap-4">
+        {livePlates.map((p) => {
+          const now = new Date();
+          const start = p.auction_start ? new Date(p.auction_start) : null;
+          const end = p.auction_end ? new Date(p.auction_end) : null;
+
+          return (
+            <div
+              key={p.$id}
+              className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+            >
+              {/* Header: reg + badge */}
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <h3 className="text-xl font-bold text-yellow-700">
+                    {p.registration}
+                  </h3>
+                  <p className="text-xs text-gray-600">
+                    Status:{" "}
+                    <span className="font-semibold text-green-700">
+                      Live in auction
+                    </span>
+                  </p>
+                </div>
+
+                <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-800">
+                  LIVE
+                </span>
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Number plate visual */}
+              <div className="flex justify-center mb-3">
+                <NumberPlate
+                  reg={p.registration}
+                  size="large"
+                  variant="rear"
+                  showBlueBand={true}
+                />
+              </div>
+
+              {/* Price info */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700 mb-2">
+                <p>
+                  <strong>Current Bid:</strong>{" "}
+                  {typeof p.current_bid === "number"
+                    ? `£${p.current_bid.toLocaleString("en-GB")}`
+                    : "No bids yet"}
+                </p>
+                <p>
+                  <strong>Reserve:</strong> £
+                  {p.reserve_price.toLocaleString("en-GB")}
+                </p>
+                <p>
+                  <strong>Buy Now:</strong>{" "}
+                  {p.buy_now
+                    ? `£${p.buy_now.toLocaleString("en-GB")}`
+                    : "Not set"}
+                </p>
+              </div>
+
+              {/* Auction timing + timer */}
+              <div className="mt-2 text-sm text-gray-700">
+                <strong>Auction Window: </strong>
+                {start
+                  ? start.toLocaleString("en-GB", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })
+                  : "TBC"}{" "}
+                –{" "}
+                {end
+                  ? end.toLocaleString("en-GB", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })
+                  : "TBC"}
+              </div>
+
+              <div className="mt-2">
+                <AdminAuctionTimer
+                  start={p.auction_start}
+                  end={p.auction_end}
+                  status="live"
+                />
+              </div>
+
+              {/* Relist & withdraw info */}
+              <div className="mt-3 text-xs text-gray-600 space-y-1">
+                <p>
+                  <strong>Relist setting:</strong>{" "}
+                  {p.relist_until_sold
+                    ? "This plate will be relisted in the next weekly auction if it does not sell."
+                    : "This plate will not be automatically relisted after this auction."}
+                </p>
+                {p.withdraw_after_current && (
+                  <p className="text-orange-700 font-semibold">
+                    Withdrawal requested – this plate will be removed after the
+                    current auction finishes and will not be entered into the
+                    next auction.
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="mt-4 flex flex-wrap gap-3 items-center">
+                <a
+                  href={`/listing/${p.$id}`}
+                  target="_blank"
+                  className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+                >
+                  View public listing
+                </a>
+
+                {!p.withdraw_after_current && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center px-4 py-2 rounded-md bg-red-500 hover:bg-red-600 text-white text-sm font-semibold"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          "Are you sure you want to withdraw this plate AFTER the current auction ends?\n\nIt will remain in the auction until this week's auction has finished, but will not be entered into the next auction."
+                        )
+                      ) {
+                        return;
+                      }
+
+                      try {
+                        const res = await fetch(
+                          "/api/dashboard/request-withdraw",
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ plateId: p.$id }),
+                          }
+                        );
+
+                        const data = await res
+                          .json()
+                          .catch(() => ({ error: "Invalid response" }));
+
+                        if (!res.ok || data.error) {
+                          alert(
+                            data.error ||
+                              "Failed to request withdrawal. Please try again."
+                          );
+                          return;
+                        }
+
+                        // Update local state so the button disappears and message shows
+                        setLivePlates((prev) =>
+                          prev.map((plate) =>
+                            plate.$id === p.$id
+                              ? { ...plate, withdraw_after_current: true }
+                              : plate
+                          )
+                        );
+
+                        alert(
+                          "Withdrawal requested. This plate will be removed after the current auction ends."
+                        );
+                      } catch (err) {
+                        console.error("request-withdraw error", err);
+                        alert("Failed to request withdrawal.");
+                      }
+                    }}
+                  >
+                    Withdraw after this auction
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+)}
 
         {/* SOLD TAB */}
         {activeTab === "sold" && (
@@ -1730,369 +2103,172 @@ export default function DashboardPage() {
           </div>
         )}
 
-                        {/* TRANSACTIONS TAB */}
+        {/* TRANSACTIONS TAB */}
         {activeTab === "transactions" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold mb-2 text-yellow-700">
               Transactions &amp; Documents
             </h2>
             <p className="text-sm text-gray-600 mb-2">
-              This page shows all{" "}
-              <strong>live sales and purchases</strong> that are still in
-              progress. It is split into:
-              <br />
-              <strong>Sales in progress</strong> (where you are the seller) and{" "}
-              <strong>Purchases in progress</strong> (where you are the buyer).
+              Active sales and purchases where payment and DVLA transfer are
+              still in progress. You&apos;ll see document upload options here
+              when admin has requested information from you.
             </p>
 
-            {activeSales.length === 0 && activePurchases.length === 0 ? (
+            {activeTransactions.length === 0 ? (
               <p className="text-gray-600 text-sm text-center">
                 You don&apos;t have any active transactions right now.
               </p>
             ) : (
-              <div className="space-y-8">
-                {/* SALES IN PROGRESS (YOU AS SELLER) */}
-                {activeSales.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold text-yellow-700">
-                      Sales in progress (you as seller)
-                    </h3>
-                    <p className="text-xs text-gray-600">
-                      These are plates you have{" "}
-                      <strong>sold on AuctionMyPlate</strong> and are now going
-                      through documents, payment and DVLA transfer.
-                    </p>
+              <div className="grid gap-4">
+                {activeTransactions.map((tx) => {
+                  const created =
+                    tx.created_at && !isNaN(new Date(tx.created_at).getTime())
+                      ? new Date(tx.created_at).toLocaleString("en-GB")
+                      : null;
 
-                    <div className="grid gap-4">
-                      {activeSales.map((tx) => {
-                        const created =
-                          tx.created_at &&
-                          !isNaN(new Date(tx.created_at).getTime())
-                            ? new Date(tx.created_at).toLocaleString("en-GB")
-                            : null;
+                  const updated =
+                    tx.updated_at && !isNaN(new Date(tx.updated_at).getTime())
+                      ? new Date(tx.updated_at).toLocaleString("en-GB")
+                      : null;
 
-                        const updated =
-                          tx.updated_at &&
-                          !isNaN(new Date(tx.updated_at).getTime())
-                            ? new Date(tx.updated_at).toLocaleString("en-GB")
-                            : null;
+                  const statusLabel =
+                    tx.transaction_status || tx.payment_status || "pending";
 
-                        const regText =
-                          (tx as any).registration ||
-                          (tx as any).plate_registration ||
-                          (tx as any).plate_id ||
-                          "UNKNOWN";
+                  const statusClasses =
+                    statusLabel === "completed" ||
+                    statusLabel === "complete" ||
+                    statusLabel === "paid"
+                      ? "bg-green-100 text-green-700"
+                      : statusLabel === "processing"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-gray-100 text-gray-600";
 
-                        const listingOrPlateId =
-                          (tx as any).plate_id ||
-                          (tx as any).listing_id ||
-                          "N/A";
+                  const regText =
+                    (tx as any).registration ||
+                    (tx as any).plate_registration ||
+                    (tx as any).plate_id ||
+                    "UNKNOWN";
 
-                        const isSeller = tx.seller_email === user?.email;
-                        const isBuyer = tx.buyer_email === user?.email;
+                  const listingOrPlateId =
+                    (tx as any).plate_id ||
+                    (tx as any).listing_id ||
+                    "N/A";
 
-                        const sellerDocsRequested =
-                          !!(tx.seller_docs_requested &&
-                          !tx.seller_docs_received);
-                        const buyerDocsRequested =
-                          !!(tx.buyer_info_requested &&
-                          !tx.buyer_info_received);
+                  const isSeller = tx.seller_email === user?.email;
+                  const isBuyer = tx.buyer_email === user?.email;
 
-                        const baseStatusLabel =
-                          tx.transaction_status ||
-                          tx.payment_status ||
-                          "pending";
+                  // When should we show the document uploader?
+                  const needsSellerDocs =
+                    isSeller &&
+                    !!tx.seller_docs_requested &&
+                    !tx.seller_docs_received;
 
-                        let statusLabel = baseStatusLabel;
-                        if (
-                          (isSeller && sellerDocsRequested) ||
-                          (isBuyer && buyerDocsRequested)
-                        ) {
-                          statusLabel = "awaiting_your_documents";
-                        }
+                  const needsBuyerDocs =
+                    isBuyer &&
+                    !!tx.buyer_info_requested &&
+                    !tx.buyer_info_received;
 
-                        const statusKey = statusLabel.toLowerCase();
-                        const statusClasses =
-                          statusKey === "completed" ||
-                          statusKey === "complete" ||
-                          statusKey === "paid"
-                            ? "bg-green-100 text-green-700"
-                            : statusKey.includes("awaiting")
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-gray-100 text-gray-600";
+                  const showUploader =
+                    !!profile && (needsSellerDocs || needsBuyerDocs);
 
-                        const showUploader =
-                          !!profile &&
-                          ((isSeller && sellerDocsRequested) ||
-                            (isBuyer && buyerDocsRequested));
+                  return (
+                    <div
+                      key={tx.$id}
+                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                    >
+                      {/* Header: plate / listing / status */}
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-4">
+                          {/* Plate visual */}
+                          <NumberPlate
+                            reg={regText}
+                            size="card"
+                            variant="rear"
+                            showBlueBand={true}
+                          />
 
-                        return (
-                          <div
-                            key={tx.$id}
-                            className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
-                          >
-                            {/* Plate visual FULL WIDTH to avoid cropping */}
-                            <div className="mb-3 flex justify-start">
-                              <NumberPlate
-                                reg={regText}
-                                size="card"
-                                variant="rear"
-                                showBlueBand={true}
-                              />
-                            </div>
-
-                            {/* Header: text + status */}
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <p className="text-sm font-semibold text-gray-900">
-                                  {regText}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Listing / Plate ID: {listingOrPlateId}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Transaction ID: {tx.$id}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Role: Seller (you are being paid)
-                                </p>
-                              </div>
-
-                              <span
-                                className={`px-3 py-1 rounded-md text-xs font-semibold ${statusClasses}`}
-                              >
-                                {statusLabel.replace(/_/g, " ").toUpperCase()}
-                              </span>
-                            </div>
-
-                            {/* Money summary */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
-                              <p>
-                                <strong>Sale price:</strong> £
-                                {(tx.sale_price ?? 0).toFixed(2)}
-                              </p>
-                              <p>
-                                <strong>Commission:</strong> £
-                                {(tx.commission_amount ?? 0).toFixed(2)} (
-                                {tx.commission_rate ?? 0}%)
-                              </p>
-                              <p>
-                                <strong>Seller payout:</strong> £
-                                {(tx.seller_payout ?? 0).toFixed(2)}
-                              </p>
-                              <p>
-                                <strong>DVLA fee (buyer pays):</strong> £
-                                {(tx.dvla_fee ?? 0).toFixed(2)}
-                              </p>
-                            </div>
-
-                            {/* Dates */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
-                              <p>
-                                <strong>Created:</strong>{" "}
-                                {created || "Not recorded"}
-                              </p>
-                              <p>
-                                <strong>Last updated:</strong>{" "}
-                                {updated || "Not recorded"}
-                              </p>
-                            </div>
-
-                            {/* Documents uploader – if admin is waiting on the seller (you) */}
-                            {showUploader && (
-                              <div className="mt-4 border-t pt-3">
-                                <p className="text-xs text-gray-600 mb-2">
-                                  We&apos;re waiting for documents from you as
-                                  the <strong>seller</strong>. Please upload
-                                  your DVLA paperwork (V5C, retention
-                                  certificate, or any documents we have
-                                  requested) so we can progress the transfer.
-                                </p>
-                                <SellerDocumentsUploader
-                                  sellerId={profile.$id}
-                                  transactionId={tx.$id}
-                                  existingDocuments={(tx as any).documents || []}
-                                />
-                              </div>
-                            )}
+                          {/* Text details */}
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {regText}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Listing / Plate ID: {listingOrPlateId}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Transaction ID: {tx.$id}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Role:{" "}
+                              {isSeller
+                                ? "Seller (you are being paid)"
+                                : "Buyer (you are receiving the plate)"}
+                            </p>
                           </div>
-                        );
-                      })}
+                        </div>
+
+                        {/* Status pill */}
+                        <span
+                          className={`px-3 py-1 rounded-md text-xs font-semibold ${statusClasses}`}
+                        >
+                          {statusLabel.toUpperCase()}
+                        </span>
+                      </div>
+
+                      {/* Money summary */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                        <p>
+                          <strong>Sale price:</strong> £
+                          {(tx.sale_price ?? 0).toFixed(2)}
+                        </p>
+                        <p>
+                          <strong>Commission:</strong> £
+                          {(tx.commission_amount ?? 0).toFixed(2)} (
+                          {tx.commission_rate ?? 0}%)
+                        </p>
+                        <p>
+                          <strong>Seller payout:</strong> £
+                          {(tx.seller_payout ?? 0).toFixed(2)}
+                        </p>
+                        <p>
+                          <strong>DVLA fee (buyer pays):</strong> £
+                          {(tx.dvla_fee ?? 0).toFixed(2)}
+                        </p>
+                      </div>
+
+                      {/* Dates */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                        <p>
+                          <strong>Created:</strong>{" "}
+                          {created || "Not recorded"}
+                        </p>
+                        <p>
+                          <strong>Last updated:</strong>{" "}
+                          {updated || "Not recorded"}
+                        </p>
+                      </div>
+
+                      {/* Documents uploader (only when admin has requested docs) */}
+                      {showUploader && (
+                        <div className="mt-4 border-t pt-3">
+                          <p className="text-xs text-gray-600 mb-2">
+                            {isSeller && needsSellerDocs
+                              ? "We’re waiting for your seller documents to progress this sale. Please upload your DVLA paperwork (V5C, retention certificate, etc.) below."
+                              : isBuyer && needsBuyerDocs
+                              ? "We’re waiting for your buyer details to progress this purchase. Please upload the requested documents below."
+                              : "You can upload any requested documents for this transaction below."}
+                          </p>
+                          <SellerDocumentsUploader
+                            sellerId={profile!.$id}
+                            transactionId={tx.$id}
+                            existingDocuments={(tx as any).documents || []}
+                          />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-
-                {/* PURCHASES IN PROGRESS (YOU AS BUYER) */}
-                {activePurchases.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold text-yellow-700">
-                      Purchases in progress (you as buyer)
-                    </h3>
-                    <p className="text-xs text-gray-600">
-                      These are plates you have{" "}
-                      <strong>bought on AuctionMyPlate</strong> where we are
-                      still completing checks, documents and DVLA transfer.
-                    </p>
-
-                    <div className="grid gap-4">
-                      {activePurchases.map((tx) => {
-                        const created =
-                          tx.created_at &&
-                          !isNaN(new Date(tx.created_at).getTime())
-                            ? new Date(tx.created_at).toLocaleString("en-GB")
-                            : null;
-
-                        const updated =
-                          tx.updated_at &&
-                          !isNaN(new Date(tx.updated_at).getTime())
-                            ? new Date(tx.updated_at).toLocaleString("en-GB")
-                            : null;
-
-                        const regText =
-                          (tx as any).registration ||
-                          (tx as any).plate_registration ||
-                          (tx as any).plate_id ||
-                          "UNKNOWN";
-
-                        const listingOrPlateId =
-                          (tx as any).plate_id ||
-                          (tx as any).listing_id ||
-                          "N/A";
-
-                        const isSeller = tx.seller_email === user?.email;
-                        const isBuyer = tx.buyer_email === user?.email;
-
-                        const sellerDocsRequested =
-                          !!(tx.seller_docs_requested &&
-                          !tx.seller_docs_received);
-                        const buyerDocsRequested =
-                          !!(tx.buyer_info_requested &&
-                          !tx.buyer_info_received);
-
-                        const baseStatusLabel =
-                          tx.transaction_status ||
-                          tx.payment_status ||
-                          "pending";
-
-                        let statusLabel = baseStatusLabel;
-                        if (
-                          (isSeller && sellerDocsRequested) ||
-                          (isBuyer && buyerDocsRequested)
-                        ) {
-                          statusLabel = "awaiting_your_documents";
-                        }
-
-                        const statusKey = statusLabel.toLowerCase();
-                        const statusClasses =
-                          statusKey === "completed" ||
-                          statusKey === "complete" ||
-                          statusKey === "paid"
-                            ? "bg-green-100 text-green-700"
-                            : statusKey.includes("awaiting")
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-gray-100 text-gray-600";
-
-                        const showUploader =
-                          !!profile &&
-                          ((isSeller && sellerDocsRequested) ||
-                            (isBuyer && buyerDocsRequested));
-
-                        return (
-                          <div
-                            key={tx.$id}
-                            className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
-                          >
-                            {/* Plate visual FULL WIDTH to avoid cropping */}
-                            <div className="mb-3 flex justify-start">
-                              <NumberPlate
-                                reg={regText}
-                                size="card"
-                                variant="rear"
-                                showBlueBand={true}
-                              />
-                            </div>
-
-                            {/* Header: text + status */}
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <p className="text-sm font-semibold text-gray-900">
-                                  {regText}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Listing / Plate ID: {listingOrPlateId}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  Transaction ID: {tx.$id}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Role: Buyer (you are receiving the plate)
-                                </p>
-                              </div>
-
-                              <span
-                                className={`px-3 py-1 rounded-md text-xs font-semibold ${statusClasses}`}
-                              >
-                                {statusLabel.replace(/_/g, " ").toUpperCase()}
-                              </span>
-                            </div>
-
-                            {/* Money summary */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
-                              <p>
-                                <strong>Sale price:</strong> £
-                                {(tx.sale_price ?? 0).toFixed(2)}
-                              </p>
-                              <p>
-                                <strong>Commission:</strong> £
-                                {(tx.commission_amount ?? 0).toFixed(2)} (
-                                {tx.commission_rate ?? 0}%)
-                              </p>
-                              <p>
-                                <strong>DVLA fee (you pay):</strong> £
-                                {(tx.dvla_fee ?? 0).toFixed(2)}
-                              </p>
-                              <p>
-                                <strong>Estimated total:</strong> £
-                                {(
-                                  (tx.sale_price ?? 0) + (tx.dvla_fee ?? 0)
-                                ).toFixed(2)}
-                              </p>
-                            </div>
-
-                            {/* Dates */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
-                              <p>
-                                <strong>Created:</strong>{" "}
-                                {created || "Not recorded"}
-                              </p>
-                              <p>
-                                <strong>Last updated:</strong>{" "}
-                                {updated || "Not recorded"}
-                              </p>
-                            </div>
-
-                            {/* Documents uploader – if admin is waiting on the buyer (you) */}
-                            {showUploader && (
-                              <div className="mt-4 border-t pt-3">
-                                <p className="text-xs text-gray-600 mb-2">
-                                  We&apos;re waiting for documents from you as
-                                  the <strong>buyer</strong>. Please upload the
-                                  requested documents so we can complete checks
-                                  and move to the next step.
-                                </p>
-                                <SellerDocumentsUploader
-                                  sellerId={profile.$id}
-                                  transactionId={tx.$id}
-                                  existingDocuments={(tx as any).documents || []}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -61,11 +61,12 @@ export default function CookieBanner() {
 
           <div className="flex items-center gap-2 sm:gap-3 justify-end">
             <Link
-              href="/privacy"
-              className="text-[11px] sm:text-xs underline text-gray-300 hover:text-yellow-200"
+             href="/privacy-policy"
+           className="text-[11px] sm:text-xs underline"
             >
-              Privacy Policy
-            </Link>
+            Privacy Policy
+           </Link>
+
 
             <button
               onClick={handleAccept}

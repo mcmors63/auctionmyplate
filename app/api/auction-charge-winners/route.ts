@@ -1,52 +1,76 @@
-// app/api/auction-scheduler/route.ts
+// app/api/auction-charge-winners/route.ts
 import { NextResponse } from "next/server";
-import { Client, Databases, Query } from "node-appwrite";
 import Stripe from "stripe";
+import { Client, Databases, Query } from "node-appwrite";
 
 export const runtime = "nodejs";
 
 // -----------------------------
-// APPWRITE SETUP
+// CONSTANTS
+// -----------------------------
+const DVLA_FEE_GBP = 80;
+
+// -----------------------------
+// STRIPE INIT
+// -----------------------------
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
+if (!stripeSecret) {
+  throw new Error("Missing STRIPE_SECRET_KEY in environment");
+}
+
+const stripe = new Stripe(stripeSecret, {
+  apiVersion: "2024-06-20" as any,
+});
+
+// -----------------------------
+// APPWRITE INIT
 // -----------------------------
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const apiKey = process.env.APPWRITE_API_KEY!;
-
-const DB_ID =
-  process.env.APPWRITE_PLATES_DATABASE_ID ||
-  process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID ||
-  "690fc34a0000ce1baa63";
-
-const PLATES_COLLECTION_ID =
-  process.env.APPWRITE_PLATES_COLLECTION_ID ||
-  process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID ||
-  "plates";
-
-// BIDS collection (same DB)
-const BIDS_COLLECTION_ID =
+const PLATES_DB = process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!;
+const PLATES_COLLECTION = process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!;
+const BIDS_COLLECTION =
   process.env.NEXT_PUBLIC_APPWRITE_BIDS_COLLECTION_ID ||
-  process.env.APPWRITE_BIDS_COLLECTION_ID || "";
+  process.env.APPWRITE_BIDS_COLLECTION_ID;
 
-// STRIPE
-const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
+if (!BIDS_COLLECTION) {
+  throw new Error(
+    "Missing BIDS collection env (NEXT_PUBLIC_APPWRITE_BIDS_COLLECTION_ID or APPWRITE_BIDS_COLLECTION_ID)"
+  );
+}
 
 const client = new Client()
   .setEndpoint(endpoint)
   .setProject(projectId)
-  .setKey(apiKey); // ✅ only on node-appwrite Client
+  .setKey(apiKey);
 
 const databases = new Databases(client);
 
-// Make Stripe client lazily, only if key exists
-const stripe = stripeSecret
-  ? new Stripe(stripeSecret, { apiVersion: "2024-06-20" as any })
-  : null;
+// -----------------------------
+// TYPES (loose – we don't trust exact schema names here)
+// -----------------------------
+type PlateDoc = {
+  $id: string;
+  status?: string;
+  current_bid?: number | null;
+  reserve_price?: number | null;
+  registration?: string;
+  listing_id?: string;
+};
+
+type BidDoc = {
+  $id: string;
+  listing_id?: string;
+  amount?: number;
+  bid_amount?: number;
+  bidder_email?: string;
+  timestamp?: string;
+};
 
 // -----------------------------
-// SMALL HELPERS
+// HELPERS
 // -----------------------------
-const DVLA_FEE_GBP = 80;
-
 function getNumeric(value: any): number {
   if (typeof value === "number") return value;
   if (typeof value === "string") {
@@ -63,89 +87,66 @@ function parseTimestamp(ts: any): number {
 }
 
 // -----------------------------
-// GET = manual scheduler run
+// POST: Charge auction winners
+// Optional body: { listingId?: string }
+// - If listingId provided: only processes that one listing
+// - Else: processes ALL listings with status === "ended"
 // -----------------------------
-export async function GET() {
-  const winnerCharges: any[] = [];
-
+export async function POST(req: Request) {
   try {
-    const now = new Date();
-    const nowIso = now.toISOString();
+    const body = await req.json().catch(() => ({} as any));
+    const { listingId }: { listingId?: string } = body || {};
 
-    // ---------------------------------
-    // 1) Promote queued -> live
-    // ---------------------------------
-    const queuedRes = await databases.listDocuments(
-      DB_ID,
-      PLATES_COLLECTION_ID,
-      [
-        Query.equal("status", "queued"),
-        Query.lessThanEqual("auction_start", nowIso),
-        Query.limit(100),
-      ]
-    );
+    // 1) Get target listings
+    let listings: PlateDoc[] = [];
 
-    let promoted = 0;
-    for (const doc of queuedRes.documents as any[]) {
-      await databases.updateDocument(DB_ID, PLATES_COLLECTION_ID, doc.$id, {
-        status: "live",
-      });
-      promoted++;
+    if (listingId) {
+      // Single listing mode
+      const doc = (await databases.getDocument(
+        PLATES_DB,
+        PLATES_COLLECTION,
+        listingId
+      )) as unknown as PlateDoc;
+      listings = [doc];
+    } else {
+      // All ended auctions
+      const res = await databases.listDocuments(PLATES_DB, PLATES_COLLECTION, [
+        Query.equal("status", "ended"),
+      ]);
+      listings = res.documents as unknown as PlateDoc[];
     }
 
-    // ---------------------------------
-    // 2) live -> completed
-    // ---------------------------------
-    const liveRes = await databases.listDocuments(
-      DB_ID,
-      PLATES_COLLECTION_ID,
-      [
-        Query.equal("status", "live"),
-        Query.lessThanEqual("auction_end", nowIso),
-        Query.limit(100),
-      ]
-    );
-
-    let completed = 0;
-    const justCompleted: any[] = [];
-
-    for (const doc of liveRes.documents as any[]) {
-      const updated = await databases.updateDocument(
-        DB_ID,
-        PLATES_COLLECTION_ID,
-        doc.$id,
-        { status: "completed" }
-      );
-      completed++;
-      justCompleted.push(updated);
-    }
-
-    // ---------------------------------
-    // 3) Charge winners for just-completed listings
-    //    (if Stripe + BIDS collection are configured)
-    // ---------------------------------
-    if (!stripe || !BIDS_COLLECTION_ID) {
-      // We still return success, but explain why no charges done
+    if (!listings.length) {
       return NextResponse.json({
         ok: true,
-        now: nowIso,
-        promoted,
-        completed,
-        winnerCharges: [],
-        note:
-          "Stripe or BIDS collection not configured – skipped winner charging.",
+        processed: 0,
+        message: "No matching ended listings found.",
       });
     }
 
-    for (const listing of justCompleted) {
-      const lid = listing.$id as string;
+    const results: any[] = [];
+    let processed = 0;
+
+    // 2) For each ended listing, determine winner and charge
+    for (const listing of listings) {
+      const lid = listing.$id;
+      const status = (listing.status || "").toLowerCase();
+
+      // Only operate on ended auctions
+      if (status !== "ended") {
+        results.push({
+          listingId: lid,
+          skipped: true,
+          reason: `status is "${listing.status}", not "ended"`,
+        });
+        continue;
+      }
 
       const currentBid = getNumeric(listing.current_bid);
       const reserve = getNumeric(listing.reserve_price);
 
-      // No bids / zero current_bid
       if (!currentBid || currentBid <= 0) {
-        winnerCharges.push({
+        results.push({
           listingId: lid,
           skipped: true,
           reason: "no bids / current_bid is 0",
@@ -153,9 +154,8 @@ export async function GET() {
         continue;
       }
 
-      // Reserve not met
       if (reserve > 0 && currentBid < reserve) {
-        winnerCharges.push({
+        results.push({
           listingId: lid,
           skipped: true,
           reason: `reserve not met (bid=${currentBid}, reserve=${reserve})`,
@@ -163,19 +163,18 @@ export async function GET() {
         continue;
       }
 
-      // ---- Load bids for this listing ----
+      // 2a) Get all bids for this listing and find the latest by timestamp
       let bidsRes;
       try {
-        bidsRes = await databases.listDocuments(DB_ID, BIDS_COLLECTION_ID, [
+        bidsRes = await databases.listDocuments(PLATES_DB, BIDS_COLLECTION, [
           Query.equal("listing_id", lid),
-          Query.limit(1000),
         ]);
       } catch (err) {
         console.error(
           `Failed to list bids for listing ${lid}. Check BIDS indexes/attributes.`,
           err
         );
-        winnerCharges.push({
+        results.push({
           listingId: lid,
           skipped: true,
           reason: "failed to load bids (Appwrite error)",
@@ -183,9 +182,9 @@ export async function GET() {
         continue;
       }
 
-      const bids = (bidsRes.documents as any[]) || [];
+      const bids = (bidsRes.documents as unknown as BidDoc[]) || [];
       if (!bids.length) {
-        winnerCharges.push({
+        results.push({
           listingId: lid,
           skipped: true,
           reason: "no bids found in BIDS collection",
@@ -193,12 +192,12 @@ export async function GET() {
         continue;
       }
 
-      // Latest bid wins (by timestamp)
-      bids.sort(
+      // Sort by timestamp descending – latest bid wins
+      const sorted = bids.sort(
         (a, b) => parseTimestamp(b.timestamp) - parseTimestamp(a.timestamp)
       );
-      const winningBid = bids[0];
 
+      const winningBid = sorted[0];
       const rawAmount =
         winningBid.amount !== undefined
           ? winningBid.amount
@@ -208,7 +207,7 @@ export async function GET() {
       const winnerEmail = winningBid.bidder_email || "";
 
       if (!winnerEmail) {
-        winnerCharges.push({
+        results.push({
           listingId: lid,
           skipped: true,
           reason: "winning bid has no bidder_email",
@@ -217,7 +216,7 @@ export async function GET() {
       }
 
       if (!winningAmount || winningAmount <= 0) {
-        winnerCharges.push({
+        results.push({
           listingId: lid,
           skipped: true,
           reason: "winning bid has invalid amount",
@@ -225,12 +224,20 @@ export async function GET() {
         continue;
       }
 
+      // Just sanity: make sure winningAmount matches listing.current_bid
+      if (Math.abs(winningAmount - currentBid) > 0.0001) {
+        console.warn(
+          `Listing ${lid}: winning bid (${winningAmount}) != current_bid (${currentBid}). Using winningAmount.`
+        );
+      }
+
       const finalBidAmount = winningAmount || currentBid;
       const totalWithDvla = finalBidAmount + DVLA_FEE_GBP;
       const amountInPence = Math.round(totalWithDvla * 100);
 
+      // 2b) Stripe: find/create customer & saved card
       try {
-        // ---- Stripe: find/create customer ----
+        // Find or create customer
         const existing = await stripe.customers.list({
           email: winnerEmail,
           limit: 1,
@@ -238,10 +245,12 @@ export async function GET() {
 
         let customer = existing.data[0];
         if (!customer) {
-          customer = await stripe.customers.create({ email: winnerEmail });
+          customer = await stripe.customers.create({
+            email: winnerEmail,
+          });
         }
 
-        // ---- Get saved card ----
+        // Get saved card
         const paymentMethods = await stripe.paymentMethods.list({
           customer: customer.id,
           type: "card",
@@ -249,7 +258,7 @@ export async function GET() {
         });
 
         if (!paymentMethods.data.length) {
-          winnerCharges.push({
+          results.push({
             listingId: lid,
             skipped: true,
             reason:
@@ -261,7 +270,7 @@ export async function GET() {
 
         const paymentMethod = paymentMethods.data[0];
 
-        // ---- Charge winner (idempotent) ----
+        // 2c) Create + confirm PaymentIntent with idempotency
         const idempotencyKey = `winner-charge-${lid}`;
 
         const intent = await stripe.paymentIntents.create(
@@ -286,7 +295,8 @@ export async function GET() {
           { idempotencyKey }
         );
 
-        winnerCharges.push({
+        processed++;
+        results.push({
           listingId: lid,
           charged: true,
           winnerEmail,
@@ -295,36 +305,42 @@ export async function GET() {
           paymentIntentId: intent.id,
           paymentStatus: intent.status,
         });
-
-        // status stays "completed" – further workflow handled elsewhere
       } catch (err: any) {
         console.error(`Stripe error charging winner for listing ${lid}:`, err);
+        const stripeError = err as Stripe.StripeError & {
+          raw?: { payment_intent?: Stripe.PaymentIntent };
+        };
+
         const entry: any = {
           listingId: lid,
           charged: false,
           winnerEmail,
-          error: err?.message || "Stripe charge failed.",
+          error: stripeError.message || "Stripe charge failed.",
+          type: stripeError.type,
+          code: (stripeError as any).code,
         };
-        const anyErr = err as any;
-        if (anyErr?.raw?.payment_intent) {
-          entry.paymentIntentId = anyErr.raw.payment_intent.id;
-          entry.paymentStatus = anyErr.raw.payment_intent.status;
+
+        if (stripeError.raw?.payment_intent) {
+          entry.paymentIntentId = stripeError.raw.payment_intent.id;
+          entry.paymentStatus = stripeError.raw.payment_intent.status;
         }
-        winnerCharges.push(entry);
+
+        results.push(entry);
       }
     }
 
     return NextResponse.json({
       ok: true,
-      now: nowIso,
-      promoted,
-      completed,
-      winnerCharges,
+      processed,
+      results,
     });
   } catch (err: any) {
-    console.error("auction-scheduler error", err);
+    console.error("auction-charge-winners fatal error:", err);
     return NextResponse.json(
-      { ok: false, error: err.message || "Unknown error" },
+      {
+        ok: false,
+        error: err.message || "Unknown error",
+      },
       { status: 500 }
     );
   }

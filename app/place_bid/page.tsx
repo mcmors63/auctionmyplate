@@ -5,8 +5,13 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Client, Databases, Account } from "appwrite";
 import Link from "next/link";
-import AuctionTimer from "../current-listings/AuctionTimer";
+import AdminAuctionTimer from "@/components/ui/AdminAuctionTimer";
 import DvlaPlate from "./DvlaPlate";
+
+// ----------------------------------------------------
+// Constants
+// ----------------------------------------------------
+const DVLA_FEE_GBP = 80; // £80 paperwork fee
 
 // ----------------------------------------------------
 // Appwrite
@@ -33,7 +38,13 @@ type Listing = {
   starting_price?: number | null;
   bids?: number | null;
   reserve_price?: number | null;
+
+  // Support both old + new names just in case
+  auction_start?: string | null;
   auction_end?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+
   buy_now?: number | null;
   buy_now_price?: number | null;
 };
@@ -72,12 +83,19 @@ export default function PlaceBidPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Stripe payment method state
+  const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(null);
+  const [checkingPaymentMethod, setCheckingPaymentMethod] = useState(false);
+  const [paymentMethodError, setPaymentMethodError] = useState<string | null>(
+    null
+  );
+
   // ----------------------------------------------------
   // LOGIN CHECK – localStorage first (navbar), then Appwrite
   // ----------------------------------------------------
   useEffect(() => {
     const checkLogin = async () => {
-      // 1) LocalStorage – same source navbar uses
+      // 1) LocalStorage – same as navbar
       if (typeof window !== "undefined") {
         const storedEmail = window.localStorage.getItem("amp_user_email");
         const storedId = window.localStorage.getItem("amp_user_id");
@@ -109,6 +127,48 @@ export default function PlaceBidPage() {
 
     checkLogin();
   }, []);
+
+  // ----------------------------------------------------
+  // STRIPE – CHECK SAVED PAYMENT METHOD
+  // ----------------------------------------------------
+  useEffect(() => {
+    const checkPaymentMethod = async () => {
+      if (!loggedIn || !userEmail) {
+        setHasPaymentMethod(null);
+        return;
+      }
+
+      setCheckingPaymentMethod(true);
+      setPaymentMethodError(null);
+
+      try {
+        const res = await fetch("/api/stripe/has-payment-method", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userEmail, userId }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            data.error || "Could not verify your payment method."
+          );
+        }
+
+        setHasPaymentMethod(Boolean(data.hasPaymentMethod));
+      } catch (err: any) {
+        console.error("has-payment-method error:", err);
+        setPaymentMethodError(
+          err.message || "Could not verify your payment method."
+        );
+        setHasPaymentMethod(null);
+      } finally {
+        setCheckingPaymentMethod(false);
+      }
+    };
+
+    checkPaymentMethod();
+  }, [loggedIn, userEmail, userId]);
 
   // ----------------------------------------------------
   // LOAD LISTING
@@ -172,6 +232,42 @@ export default function PlaceBidPage() {
   const displayId =
     listing.listing_id || `AMP-${listing.$id.slice(-6).toUpperCase()}`;
 
+  // Timer props for AdminAuctionTimer – match current-listings card
+  const auctionStart =
+    listing.auction_start ?? listing.start_time ?? null;
+
+  const auctionEnd =
+    listing.auction_end ?? listing.end_time ?? null;
+
+  // ---- NEW: detect if the auction has actually ended based on time ----
+  const auctionEndMs = auctionEnd ? Date.parse(auctionEnd) : null;
+  const auctionEnded =
+    auctionEndMs !== null && Number.isFinite(auctionEndMs)
+      ? auctionEndMs <= Date.now()
+      : false;
+
+  // Only allow bidding / buy now when status is live AND end time is in future
+  const canBidOrBuyNow = isLive && !auctionEnded;
+
+  // Timer label + status
+  let timerLabel: string;
+  if (auctionEnded) {
+    timerLabel = "AUCTION ENDED";
+  } else if (isLive) {
+    timerLabel = "AUCTION ENDS IN";
+  } else {
+    timerLabel = "AUCTION STARTS IN";
+  }
+
+  const timerStatus: "queued" | "live" | "ended" =
+    auctionEnded ? "ended" : isLive ? "live" : isComing ? "queued" : "ended";
+
+  const paymentBlocked =
+    loggedIn &&
+    !checkingPaymentMethod &&
+    hasPaymentMethod === false &&
+    !paymentMethodError;
+
   // ----------------------------------------------------
   // HANDLE BID
   // ----------------------------------------------------
@@ -184,8 +280,13 @@ export default function PlaceBidPage() {
       return;
     }
 
-    if (!isLive) {
-      setError("Auction not live.");
+    if (paymentBlocked) {
+      setError("You must add a payment method before placing a bid.");
+      return;
+    }
+
+    if (!canBidOrBuyNow) {
+      setError("Auction has already ended.");
       return;
     }
 
@@ -214,10 +315,17 @@ export default function PlaceBidPage() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.requiresPaymentMethod) {
+          setHasPaymentMethod(false);
+        }
+        throw new Error(data.error || "Failed to place bid.");
+      }
 
-      setListing(data.updatedListing);
+      if (data.updatedListing) {
+        setListing(data.updatedListing);
+      }
       setSuccess("Bid placed successfully!");
       setBidAmount("");
     } catch (err: any) {
@@ -228,7 +336,7 @@ export default function PlaceBidPage() {
   };
 
   // ----------------------------------------------------
-  // HANDLE BUY NOW
+  // HANDLE BUY NOW – CHARGE CARD VIA STRIPE, THEN MARK SOLD
   // ----------------------------------------------------
   const handleBuyNow = async () => {
     setError(null);
@@ -239,8 +347,13 @@ export default function PlaceBidPage() {
       return;
     }
 
-    if (!isLive) {
-      setError("Auction not live.");
+    if (paymentBlocked) {
+      setError("You must add a payment method before using Buy Now.");
+      return;
+    }
+
+    if (!canBidOrBuyNow) {
+      setError("Auction has already ended.");
       return;
     }
 
@@ -250,13 +363,53 @@ export default function PlaceBidPage() {
     }
 
     const ok = window.confirm(
-      `Are you sure you want to use Buy Now and purchase ${listing.registration} for £${buyNowPrice.toLocaleString()}?\n\nThis will end the auction immediately and commit you to the purchase.`
+      `Are you sure you want to use Buy Now and purchase ${
+        listing.registration
+      } for £${buyNowPrice.toLocaleString()}?\n\nAn £${DVLA_FEE_GBP.toFixed(
+        2
+      )} DVLA paperwork fee will be added.\nThis will end the auction immediately and commit you to the purchase.`
     );
     if (!ok) return;
 
     try {
       setSubmitting(true);
 
+      // 1) Charge card via Stripe (off-session, saved payment method)
+      const totalWithDvla = buyNowPrice + DVLA_FEE_GBP; // GBP
+      const amountInPence = Math.round(totalWithDvla * 100);
+
+      const stripeRes = await fetch("/api/stripe/charge-off-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userEmail,
+          amountInPence,
+          description: `Buy Now - ${
+            listing.registration || displayId
+          } (incl. £${DVLA_FEE_GBP} DVLA fee)`,
+          metadata: {
+            listingId: listing.$id,
+            type: "buy_now",
+          },
+        }),
+      });
+
+      const stripeData = await stripeRes.json().catch(() => ({} as any));
+
+      if (!stripeRes.ok || !stripeData.ok) {
+        if (stripeData?.requiresPaymentMethod) {
+          setHasPaymentMethod(false);
+        }
+        throw new Error(
+          stripeData?.error ||
+            "Your card could not be charged. Please check your payment method."
+        );
+      }
+
+      const paymentIntentId: string | undefined =
+        stripeData.paymentIntentId || stripeData.paymentIntentID;
+
+      // 2) Tell backend to mark the plate as sold & create transaction
       const res = await fetch("/api/buy-now", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -264,28 +417,27 @@ export default function PlaceBidPage() {
           listingId: listing.$id,
           userEmail,
           userId,
+          paymentIntentId,
+          totalCharged: totalWithDvla,
         }),
       });
 
-      let data: any = null;
-      try {
-        data = await res.json();
-      } catch {
-        // ignore JSON parse error
-      }
+      const data = await res.json().catch(() => ({} as any));
 
       if (!res.ok) {
+        console.error("Buy Now backend error after Stripe charge:", data);
         throw new Error(
-          data?.error || `Buy Now failed (HTTP ${res.status}).`
+          data.error ||
+            "Payment succeeded but we could not mark the plate as sold. Please contact support immediately."
         );
       }
 
-      if (data?.updatedListing) {
+      if (data.updatedListing) {
         setListing(data.updatedListing);
       }
 
       setSuccess(
-        "Buy Now successful. This plate is now sold and we’ll contact you to complete payment and DVLA transfer."
+        "Buy Now successful. Your card has been charged and this plate is now sold. We’ll contact you to complete DVLA transfer."
       );
     } catch (err: any) {
       console.error("Buy Now error:", err);
@@ -322,7 +474,7 @@ export default function PlaceBidPage() {
             <DvlaPlate registration={listing.registration} />
           </div>
 
-          {/* Right-hand summary (no hero timer) */}
+          {/* Right-hand summary */}
           <div className="relative z-10 hidden sm:flex flex-col items-end text-right text-gray-200 text-xs gap-2">
             <div>
               <p className="uppercase tracking-[0.18em] text-[10px] text-gray-400">
@@ -347,14 +499,19 @@ export default function PlaceBidPage() {
       <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
         {/* Status pills */}
         <div className="flex justify-end gap-2">
-          {isLive && (
+          {canBidOrBuyNow && (
             <span className="px-4 py-1 bg-[#FFD500] border border-black rounded-full font-bold text-sm">
               LIVE
             </span>
           )}
-          {isComing && (
+          {isComing && !auctionEnded && (
             <span className="px-4 py-1 bg-gray-200 text-gray-700 rounded-full font-bold text-sm">
               Queued
+            </span>
+          )}
+          {auctionEnded && (
+            <span className="px-4 py-1 bg-gray-300 text-gray-800 rounded-full font-bold text-sm">
+              ENDED
             </span>
           )}
         </div>
@@ -377,20 +534,21 @@ export default function PlaceBidPage() {
             <p className="mt-2 font-bold text-green-700">Reserve Met</p>
           )}
 
-          {buyNowPrice && (
+          {buyNowPrice && canBidOrBuyNow && (
             <p className="mt-2 text-sm font-semibold text-blue-700">
               Buy Now available: £{buyNowPrice.toLocaleString()}
             </p>
           )}
         </div>
 
-        {/* TIMER SECTION – this stays */}
+        {/* TIMER SECTION – uses same AdminAuctionTimer as listing cards */}
         <div>
-          <p className="text-xs text-gray-500 uppercase">Auction Ends In</p>
+          <p className="text-xs text-gray-500 uppercase">{timerLabel}</p>
           <div className="inline-block mt-1 px-3 py-2 bg-white border border-black rounded-lg shadow-sm font-semibold text-black">
-            <AuctionTimer
-              mode={isLive ? "live" : "coming"}
-              endTime={listing.auction_end ?? undefined}
+            <AdminAuctionTimer
+              start={auctionStart}
+              end={auctionEnd}
+              status={timerStatus}
             />
           </div>
         </div>
@@ -403,6 +561,41 @@ export default function PlaceBidPage() {
             There will be an £80.00 fee added to all winning bids to process
             DVLA paperwork (auctionmyplate.co.uk has no affiliation with DVLA).
           </p>
+
+          {/* Payment method banners (only when logged in) */}
+          {loggedIn && (
+            <div className="space-y-2 mt-2">
+              {checkingPaymentMethod && (
+                <p className="text-xs text-gray-600">
+                  Checking your saved payment method…
+                </p>
+              )}
+
+              {paymentMethodError && (
+                <p className="bg-red-50 text-red-700 border border-red-200 p-2 rounded text-xs">
+                  {paymentMethodError}
+                </p>
+              )}
+
+              {hasPaymentMethod === false &&
+                !checkingPaymentMethod &&
+                !paymentMethodError && (
+                  <div className="bg-yellow-50 border border-yellow-300 text-yellow-900 p-3 rounded text-xs">
+                    <p className="font-semibold">Action needed</p>
+                    <p className="mt-1">
+                      Before you can bid or use Buy Now, you must add a payment
+                      method.
+                    </p>
+                    <Link
+                      href="/payment-method"
+                      className="mt-2 inline-block text-xs font-semibold text-blue-700 underline"
+                    >
+                      Add / manage payment method
+                    </Link>
+                  </div>
+                )}
+            </div>
+          )}
 
           {!loggedIn ? (
             // -----------------------------
@@ -429,9 +622,22 @@ export default function PlaceBidPage() {
                 </Link>
               </div>
             </div>
+          ) : auctionEnded ? (
+            // -----------------------------
+            // AUCTION ENDED MESSAGE
+            // -----------------------------
+            <div className="mt-4 border border-red-300 bg-red-50 rounded-lg p-4 space-y-2">
+              <p className="font-semibold text-red-800">
+                Auction has already ended.
+              </p>
+              <p className="text-sm text-red-900">
+                No further bids or Buy Now purchases can be made on this
+                listing.
+              </p>
+            </div>
           ) : (
             // -----------------------------
-            // LOGGED IN STATE
+            // LOGGED IN STATE (auction live/upcoming)
             // -----------------------------
             <>
               {error && (
@@ -463,16 +669,27 @@ export default function PlaceBidPage() {
               <div className="flex flex-col sm:flex-row gap-3 mt-2">
                 <button
                   onClick={handleBid}
-                  disabled={!isLive || submitting}
+                  disabled={
+                    !canBidOrBuyNow ||
+                    submitting ||
+                    paymentBlocked ||
+                    checkingPaymentMethod
+                  }
                   className={`flex-1 rounded-lg py-3 text-lg font-semibold text-white ${
-                    isLive
+                    canBidOrBuyNow &&
+                    !paymentBlocked &&
+                    !checkingPaymentMethod
                       ? "bg-blue-600 hover:bg-blue-700"
                       : "bg-gray-400 cursor-not-allowed"
                   }`}
                 >
-                  {isLive
+                  {canBidOrBuyNow
                     ? submitting
                       ? "Processing…"
+                      : paymentBlocked
+                      ? "Add Payment Method"
+                      : checkingPaymentMethod
+                      ? "Checking Payment…"
                       : "Place Bid"
                     : "Auction Not Live"}
                 </button>
@@ -480,21 +697,44 @@ export default function PlaceBidPage() {
                 {buyNowPrice && (
                   <button
                     onClick={handleBuyNow}
-                    disabled={!isLive || submitting}
+                    disabled={
+                      !canBidOrBuyNow ||
+                      submitting ||
+                      paymentBlocked ||
+                      checkingPaymentMethod
+                    }
                     className={`flex-1 rounded-lg py-3 text-lg font-semibold ${
-                      isLive
+                      canBidOrBuyNow &&
+                      !paymentBlocked &&
+                      !checkingPaymentMethod
                         ? "bg-green-600 hover:bg-green-700 text-white"
                         : "bg-gray-300 text-gray-600 cursor-not-allowed"
                     }`}
                   >
-                    {isLive
+                    {canBidOrBuyNow
                       ? submitting
                         ? "Processing Buy Now…"
+                        : paymentBlocked
+                        ? "Add Payment Method"
+                        : checkingPaymentMethod
+                        ? "Checking Payment…"
                         : `Buy Now £${buyNowPrice.toLocaleString()}`
                       : "Buy Now Unavailable"}
                   </button>
                 )}
               </div>
+
+              {/* Link to manage payment method even when allowed */}
+              {loggedIn && (
+                <div className="mt-3">
+                  <Link
+                    href="/payment-method"
+                    className="text-xs text-blue-700 underline"
+                  >
+                    Manage payment method
+                  </Link>
+                </div>
+              )}
             </>
           )}
         </div>

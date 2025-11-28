@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import AdminAuctionTimer from "@/components/ui/AdminAuctionTimer";
+import AuctionTimer from "./AuctionTimer"; // ✅ use public timer, not AdminAuctionTimer
 
 type Listing = {
   $id: string;
@@ -74,18 +74,6 @@ export default function ListingCard({ listing }: Props) {
   // -----------------------------
   const hasBuyNow =
     isLive && typeof buy_now === "number" && buy_now > 0;
-
-  // -----------------------------
-  // Timer status for AdminAuctionTimer
-  // -----------------------------
-  let timerStatus: "queued" | "live" | "ended" | undefined;
-  if (
-    lowerStatus === "queued" ||
-    lowerStatus === "live" ||
-    lowerStatus === "ended"
-  ) {
-    timerStatus = lowerStatus as "queued" | "live" | "ended";
-  }
 
   return (
     <div className="bg-white text-gray-900 border border-gold/40 rounded-xl shadow-md p-4 flex flex-col gap-3 transition hover:shadow-lg w-full">
@@ -174,11 +162,20 @@ export default function ListingCard({ listing }: Props) {
         <div className="w-full">
           <p className="text-[9px] text-gray-500 mb-0.5">{timerLabel}</p>
           <div className="px-3 py-1.5 bg-white border border-gold rounded-lg shadow-sm inline-block min-w-[180px]">
-            <AdminAuctionTimer
-              start={auction_start ?? null}
-              end={auction_end ?? null}
-              status={timerStatus}
-            />
+            {(isLive || isQueued) && (
+              <AuctionTimer
+                mode={isLive ? "live" : "coming"}
+                // queued = countdown to auction_start, live = countdown to auction_end
+                endTime={
+                  isLive
+                    ? auction_end ?? undefined
+                    : auction_start ?? undefined
+                }
+              />
+            )}
+            {!isLive && !isQueued && (
+              <span className="text-[10px]">No active auction</span>
+            )}
           </div>
         </div>
 

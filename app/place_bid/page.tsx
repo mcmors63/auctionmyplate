@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Client, Databases, Account } from "appwrite";
 import Link from "next/link";
 import AuctionTimer from "../current-listings/AuctionTimer";
+import DvlaPlate from "./DvlaPlate";
 
 // ----------------------------------------------------
 // Appwrite
@@ -66,16 +67,47 @@ export default function PlaceBidPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
   const [loggedIn, setLoggedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // ----------------------------------------------------
-  // LOGIN CHECK
+  // LOGIN CHECK – localStorage first (navbar), then Appwrite
   // ----------------------------------------------------
   useEffect(() => {
-    account.get().then(
-      () => setLoggedIn(true),
-      () => setLoggedIn(false)
-    );
+    const checkLogin = async () => {
+      // 1) LocalStorage – same source navbar uses
+      if (typeof window !== "undefined") {
+        const storedEmail = window.localStorage.getItem("amp_user_email");
+        const storedId = window.localStorage.getItem("amp_user_id");
+        if (storedEmail) {
+          setLoggedIn(true);
+          setUserEmail(storedEmail);
+          if (storedId) setUserId(storedId);
+          return;
+        }
+      }
+
+      // 2) Fallback: real Appwrite session
+      try {
+        const current = await account.get();
+        setLoggedIn(true);
+        setUserEmail(current.email);
+        setUserId(current.$id);
+
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("amp_user_email", current.email);
+          window.localStorage.setItem("amp_user_id", current.$id);
+        }
+      } catch {
+        setLoggedIn(false);
+        setUserEmail(null);
+        setUserId(null);
+      }
+    };
+
+    checkLogin();
   }, []);
 
   // ----------------------------------------------------
@@ -121,13 +153,11 @@ export default function PlaceBidPage() {
 
   const bidsCount = listing.bids ?? 0;
 
-  // Reserve logic: only treat as met if reserve > 0
   const hasReserve =
     typeof listing.reserve_price === "number" && listing.reserve_price > 0;
   const reserveMet =
     hasReserve && effectiveBaseBid >= (listing.reserve_price as number);
 
-  // Buy Now – use buy_now from Appwrite, fallback to buy_now_price
   const rawBuyNow =
     (listing.buy_now as number | null | undefined) ??
     (listing.buy_now_price as number | null | undefined) ??
@@ -149,8 +179,8 @@ export default function PlaceBidPage() {
     setError(null);
     setSuccess(null);
 
-    if (!loggedIn) {
-      router.push("/login");
+    if (!loggedIn || !userEmail) {
+      setError("You must be logged in to place a bid.");
       return;
     }
 
@@ -179,6 +209,8 @@ export default function PlaceBidPage() {
         body: JSON.stringify({
           listingId: listing.$id,
           amount,
+          userEmail,
+          userId,
         }),
       });
 
@@ -196,14 +228,14 @@ export default function PlaceBidPage() {
   };
 
   // ----------------------------------------------------
-  // HANDLE BUY NOW (with confirmation)
+  // HANDLE BUY NOW
   // ----------------------------------------------------
   const handleBuyNow = async () => {
     setError(null);
     setSuccess(null);
 
-    if (!loggedIn) {
-      router.push("/login");
+    if (!loggedIn || !userEmail) {
+      setError("You must be logged in to use Buy Now.");
       return;
     }
 
@@ -230,6 +262,8 @@ export default function PlaceBidPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           listingId: listing.$id,
+          userEmail,
+          userId,
         }),
       });
 
@@ -266,7 +300,7 @@ export default function PlaceBidPage() {
   // ----------------------------------------------------
   return (
     <div className="min-h-screen bg-[#F5F5F5] py-8 px-4">
-      {/* BACK */}
+      {/* BACK LINK */}
       <div className="max-w-4xl mx-auto mb-4">
         <Link
           href="/current-listings"
@@ -276,33 +310,42 @@ export default function PlaceBidPage() {
         </Link>
       </div>
 
-            {/* PLATE HERO (no external image) */}
+      {/* DVLA-STYLE PLATE HERO */}
       <div className="max-w-4xl mx-auto mb-6">
-        <div className="relative mx-auto w-full max-w-[520px] aspect-[16/9] rounded-3xl border-[3px] border-black bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 shadow-2xl flex items-center justify-center overflow-hidden">
-          {/* Glow / road shadow */}
-          <div className="absolute inset-x-8 bottom-6 h-2 bg-black/40 blur-lg rounded-full" />
+        <div className="relative overflow-hidden rounded-2xl border border-black/40 shadow-xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-7 sm:px-10 sm:py-8 flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
+          {/* Soft glows */}
+          <div className="pointer-events-none absolute -top-10 -left-10 h-32 w-32 rounded-full bg-yellow-300/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-yellow-500/20 blur-3xl" />
 
-          {/* Simple car hint: roof line */}
-          <div className="absolute inset-x-16 top-8 h-10 rounded-full border-2 border-slate-500/80" />
-
-          {/* Number plate */}
-          <div className="relative">
-            <div className="bg-[#FFD500] text-black font-extrabold tracking-[0.18em] text-lg sm:text-2xl px-6 sm:px-8 py-2 sm:py-3 rounded-md border-[3px] border-black shadow-[0_8px_0_rgba(0,0,0,0.6)] text-center">
-              {listing.registration}
-            </div>
+          {/* DVLA-style plate ONLY */}
+          <div className="relative z-10 flex-1 flex flex-col items-center">
+            <DvlaPlate registration={listing.registration} />
           </div>
 
-          {/* Front bumper bar behind plate */}
-          <div className="absolute inset-x-20 bottom-10 h-3 bg-slate-700 rounded-full opacity-70" />
-        </div>
+          {/* Right-hand summary (no hero timer) */}
+          <div className="relative z-10 hidden sm:flex flex-col items-end text-right text-gray-200 text-xs gap-2">
+            <div>
+              <p className="uppercase tracking-[0.18em] text-[10px] text-gray-400">
+                Listing ID
+              </p>
+              <p className="text-sm font-semibold">{displayId}</p>
+            </div>
 
-        <p className="mt-2 text-center text-[10px] text-gray-500">
-          Registration shown for illustration &mdash; vehicle image is for display only.
-        </p>
+            <div className="mt-2">
+              <p className="uppercase tracking-[0.18em] text-[10px] text-gray-400">
+                Current bid
+              </p>
+              <p className="text-sm font-semibold">
+                £{effectiveBaseBid.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* PANEL */}
+      {/* MAIN PANEL */}
       <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
+        {/* Status pills */}
         <div className="flex justify-end gap-2">
           {isLive && (
             <span className="px-4 py-1 bg-[#FFD500] border border-black rounded-full font-bold text-sm">
@@ -316,6 +359,7 @@ export default function PlaceBidPage() {
           )}
         </div>
 
+        {/* Listing summary */}
         <div>
           <p className="text-xs text-gray-500 uppercase">Listing ID</p>
           <p className="font-bold text-lg">{displayId}</p>
@@ -340,7 +384,7 @@ export default function PlaceBidPage() {
           )}
         </div>
 
-        {/* TIMER */}
+        {/* TIMER SECTION – this stays */}
         <div>
           <p className="text-xs text-gray-500 uppercase">Auction Ends In</p>
           <div className="inline-block mt-1 px-3 py-2 bg-white border border-black rounded-lg shadow-sm font-semibold text-black">
@@ -351,7 +395,7 @@ export default function PlaceBidPage() {
           </div>
         </div>
 
-        {/* BID + BUY NOW PANEL */}
+        {/* BID / LOGIN PANEL */}
         <div className="bg-white border border-black rounded-xl p-6 shadow-sm space-y-4">
           <h3 className="text-xl font-bold">Place Your Bid</h3>
 
@@ -360,67 +404,99 @@ export default function PlaceBidPage() {
             DVLA paperwork (auctionmyplate.co.uk has no affiliation with DVLA).
           </p>
 
-          {error && (
-            <p className="bg-red-50 text-red-700 border border-red-200 p-3 rounded">
-              {error}
-            </p>
+          {!loggedIn ? (
+            // -----------------------------
+            // LOGGED OUT STATE
+            // -----------------------------
+            <div className="mt-4 border border-yellow-400 bg-[#FFFBE6] rounded-lg p-4 space-y-3">
+              <p className="font-semibold text-yellow-800">Log in to bid</p>
+              <p className="text-sm text-yellow-900">
+                You need an AuctionMyPlate account to place bids and use Buy
+                Now.
+              </p>
+              <div className="flex flex-wrap gap-3 mt-2">
+                <Link
+                  href="/login"
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/register"
+                  className="px-5 py-2 rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 font-semibold text-sm"
+                >
+                  Register
+                </Link>
+              </div>
+            </div>
+          ) : (
+            // -----------------------------
+            // LOGGED IN STATE
+            // -----------------------------
+            <>
+              {error && (
+                <p className="bg-red-50 text-red-700 border border-red-200 p-3 rounded">
+                  {error}
+                </p>
+              )}
+
+              {success && (
+                <p className="bg-green-50 text-green-700 border border-green-200 p-3 rounded">
+                  {success}
+                </p>
+              )}
+
+              <p className="text-sm text-gray-700">
+                Minimum bid:{" "}
+                <strong>£{minimumAllowed.toLocaleString()}</strong>
+              </p>
+
+              <input
+                type="number"
+                value={bidAmount}
+                onChange={(e) => setBidAmount(e.target.value)}
+                min={minimumAllowed}
+                placeholder={`£${minimumAllowed.toLocaleString()}`}
+                className="w-full border border-black rounded-lg p-3 text-lg text-center"
+              />
+
+              <div className="flex flex-col sm:flex-row gap-3 mt-2">
+                <button
+                  onClick={handleBid}
+                  disabled={!isLive || submitting}
+                  className={`flex-1 rounded-lg py-3 text-lg font-semibold text-white ${
+                    isLive
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "bg-gray-400 cursor-not-allowed"
+                  }`}
+                >
+                  {isLive
+                    ? submitting
+                      ? "Processing…"
+                      : "Place Bid"
+                    : "Auction Not Live"}
+                </button>
+
+                {buyNowPrice && (
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={!isLive || submitting}
+                    className={`flex-1 rounded-lg py-3 text-lg font-semibold ${
+                      isLive
+                        ? "bg-green-600 hover:bg-green-700 text-white"
+                        : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                    }`}
+                  >
+                    {isLive
+                      ? submitting
+                        ? "Processing Buy Now…"
+                        : `Buy Now £${buyNowPrice.toLocaleString()}`
+                      : "Buy Now Unavailable"}
+                  </button>
+                )}
+              </div>
+            </>
           )}
-
-          {success && (
-            <p className="bg-green-50 text-green-700 border border-green-200 p-3 rounded">
-              {success}
-            </p>
-          )}
-
-          <p className="text-sm text-gray-700">
-            Minimum bid:{" "}
-            <strong>£{minimumAllowed.toLocaleString()}</strong>
-          </p>
-
-          <input
-            type="number"
-            value={bidAmount}
-            onChange={(e) => setBidAmount(e.target.value)}
-            min={minimumAllowed}
-            placeholder={`£${minimumAllowed.toLocaleString()}`}
-            className="w-full border border-black rounded-lg p-3 text-lg text-center"
-          />
-
-          <div className="flex flex-col sm:flex-row gap-3 mt-2">
-            <button
-              onClick={handleBid}
-              disabled={!isLive || submitting}
-              className={`flex-1 rounded-lg py-3 text-lg font-semibold text-white ${
-                isLive
-                  ? "bg-blue-600 hover:bg-blue-700"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
-              {isLive
-                ? submitting
-                  ? "Processing…"
-                  : "Place Bid"
-                : "Auction Not Live"}
-            </button>
-
-            {buyNowPrice && (
-              <button
-                onClick={handleBuyNow}
-                disabled={!isLive || submitting}
-                className={`flex-1 rounded-lg py-3 text-lg font-semibold ${
-                  isLive
-                    ? "bg-green-600 hover:bg-green-700 text-white"
-                    : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                }`}
-              >
-                {isLive
-                  ? submitting
-                    ? "Processing Buy Now…"
-                    : `Buy Now £${buyNowPrice.toLocaleString()}`
-                  : "Buy Now Unavailable"}
-              </button>
-            )}
-          </div>
         </div>
       </div>
     </div>

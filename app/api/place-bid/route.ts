@@ -1,6 +1,6 @@
 // app/api/place-bid/route.ts
 import { NextResponse } from "next/server";
-import { Client, Databases, ID } from "node-appwrite";
+import { Client, Databases, ID, Query } from "node-appwrite";
 
 export async function POST(req: Request) {
   try {
@@ -26,6 +26,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // Must be logged in (we need an email to find profile)
+    if (!userEmail) {
+      return NextResponse.json(
+        { error: "You must be logged in to place a bid." },
+        { status: 401 }
+      );
+    }
+
     // -----------------------------
     // APPWRITE CLIENT (SERVER KEY)
     // -----------------------------
@@ -40,8 +48,65 @@ export async function POST(req: Request) {
     const PLATES_COLLECTION = process.env.APPWRITE_PLATES_COLLECTION_ID!;
 
     // Auctions DB + bids collection
-    const BIDS_DB = "69198a79003733444105"; // your auctions DB
+    const BIDS_DB = "69198a79003733444105";
     const BIDS_COLLECTION = "bids";
+
+    // ✅ PROFILES DB / COLLECTION (for payment method flag)
+    const PROFILES_DB =
+      process.env.APPWRITE_PROFILES_DATABASE_ID ||
+      process.env.NEXT_PUBLIC_APPWRITE_PROFILES_DATABASE_ID;
+    const PROFILES_COLLECTION =
+      process.env.APPWRITE_PROFILES_COLLECTION_ID ||
+      process.env.NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID;
+
+    if (!PROFILES_DB || !PROFILES_COLLECTION) {
+      console.error("Profiles DB/collection env vars missing");
+      return NextResponse.json(
+        {
+          error:
+            "Profiles configuration is missing. Please contact support before bidding.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // -----------------------------
+    // PAYMENT METHOD CHECK
+    // -----------------------------
+    const profileRes = await db.listDocuments(PROFILES_DB, PROFILES_COLLECTION, [
+      Query.equal("email", userEmail),
+    ]);
+
+    if (!profileRes.documents.length) {
+      return NextResponse.json(
+        {
+          error:
+            "We could not find your profile. Please complete your personal details before bidding.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const profile = profileRes.documents[0] as any;
+
+    // 👇 STRONGER CHECK: only strict `true` counts as “has payment method”
+    const flagRaw = profile.has_payment_method;
+    const hasPaymentMethod = flagRaw === true;
+
+    if (!hasPaymentMethod) {
+      console.log("⛔ Bid blocked – has_payment_method flag:", flagRaw);
+
+      return NextResponse.json(
+        {
+          error:
+            "You must add a payment method before you can place a bid. Go to your dashboard and add a payment method first.",
+          requiresPaymentMethod: true,
+          // helpful for us while on localhost
+          debugHasPaymentMethod: flagRaw ?? null,
+        },
+        { status: 403 }
+      );
+    }
 
     // -----------------------------
     // LOAD LISTING
@@ -90,13 +155,13 @@ export async function POST(req: Request) {
     }
 
     // We *use* reserve for logic/UI, but don’t write a reserve_met field
-    const reserveMet = bidAmount >= reserve; // currently just informational
+    const reserveMet = bidAmount >= reserve;
 
     // -----------------------------
     // 5-MINUTE SOFT CLOSE LOGIC
     // -----------------------------
     const now = new Date();
-    const SOFT_CLOSE_MS = 5 * 60 * 1000; // ✅ 5 minutes
+    const SOFT_CLOSE_MS = 5 * 60 * 1000;
 
     let newEndTime: string | null = null;
 
@@ -104,9 +169,7 @@ export async function POST(req: Request) {
       const end = new Date(listing.auction_end);
       const remainingMs = end.getTime() - now.getTime();
 
-      // Only extend if we are in the final 5 minutes and still before the end
       if (remainingMs > 0 && remainingMs <= SOFT_CLOSE_MS) {
-        // ✅ Reset to 5 minutes from *now*, not from the old end
         const extendedTo = new Date(now.getTime() + SOFT_CLOSE_MS);
         newEndTime = extendedTo.toISOString();
       }
@@ -121,7 +184,6 @@ export async function POST(req: Request) {
       timestamp: now.toISOString(),
       bidder_id: userId || null,
       bidder_email: userEmail || null,
-      // no reserve_met field – not in schema
     });
 
     // -----------------------------
@@ -148,8 +210,8 @@ export async function POST(req: Request) {
     // -----------------------------
     return NextResponse.json({
       success: true,
-      extended: newEndTime, // null if no soft close, ISO string if extended
-      reserveMet, // handy if you ever want UI to react live
+      extended: newEndTime,
+      reserveMet,
       updatedListing,
     });
   } catch (err: any) {

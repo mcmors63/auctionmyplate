@@ -9,6 +9,7 @@ import NumberPlate from "@/components/ui/NumberPlate";
 import AdminAuctionTimer from "@/components/ui/AdminAuctionTimer";
 import SellerDocumentsUploader from "@/components/ui/SellerDocumentsUploader";
 import { getAuctionWindow } from "@/lib/getAuctionWindow";
+import Link from "next/link";
 
 // -----------------------------
 // Appwrite setup
@@ -171,10 +172,15 @@ const [sellForm, setSellForm] = useState({
 });
 
   const [listingFee, setListingFee] = useState(0);
-  const [commissionRate, setCommissionRate] = useState(0);
-  const [expectedReturn, setExpectedReturn] = useState(0);
-  const [sellError, setSellError] = useState("");
-  const [sellSubmitting, setSellSubmitting] = useState(false);
+const [commissionRate, setCommissionRate] = useState(0);
+const [expectedReturn, setExpectedReturn] = useState(0);
+
+// 🔢 Extra values to make the calculator clearer
+const [exampleSalePrice, setExampleSalePrice] = useState(0);
+const [commissionValue, setCommissionValue] = useState(0);
+
+const [sellError, setSellError] = useState("");
+const [sellSubmitting, setSellSubmitting] = useState(false);
 
   // Terms
   const [showTerms, setShowTerms] = useState(false);
@@ -495,28 +501,31 @@ const [sellForm, setSellForm] = useState({
   // FEE CALCULATOR
   // --------------------------------------------------------
   const calculateFees = (reserve: number) => {
-    let fee = 0;
-    let commission = 0;
+  let fee = 0;
+  let commission = 0;
 
-    if (reserve <= 4999.99) {
-      fee = 0;
-      commission = 10;
-    } else if (reserve <= 9999.99) {
-      commission = 8;
-    } else if (reserve <= 24999.99) {
-      commission = 7;
-    } else if (reserve <= 49999.99) {
-      commission = 6;
-    } else {
-      commission = 5;
-    }
+  if (reserve <= 4999.99) {
+    fee = 0;
+    commission = 10;
+  } else if (reserve <= 9999.99) {
+    commission = 8;
+  } else if (reserve <= 24999.99) {
+    commission = 7;
+  } else if (reserve <= 49999.99) {
+    commission = 6;
+  } else {
+    commission = 5;
+  }
 
-    const expected = reserve - (reserve * commission) / 100 - fee;
+  const commissionAmount = (reserve * commission) / 100;
+  const expected = reserve - commissionAmount - fee;
 
-    setListingFee(fee);
-    setCommissionRate(commission);
-    setExpectedReturn(isNaN(expected) ? 0 : expected);
-  };
+  setListingFee(fee);
+  setCommissionRate(commission);
+  setExampleSalePrice(isNaN(reserve) ? 0 : reserve);
+  setCommissionValue(isNaN(commissionAmount) ? 0 : commissionAmount);
+  setExpectedReturn(isNaN(expected) ? 0 : expected);
+};
 
   // --------------------------------------------------------
   // SELL FORM HANDLING
@@ -1089,11 +1098,11 @@ const [sellForm, setSellForm] = useState({
   </div>
 )}
               
-        {/* SELL TAB */}
+      {/* SELL TAB */}
 {activeTab === "sell" && (
   <div className="space-y-6">
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-      <h2 className="text-xl font-bold text-yellow-700">Sell a Plate</h2>
+      <h2 className="text-xl font-bold text-yellow-700">Sell my Plate</h2>
       <p className="text-xs text-gray-600">
         Listing is free. Fees only apply if your plate sells.
       </p>
@@ -1183,8 +1192,8 @@ const [sellForm, setSellForm] = useState({
         />
       </div>
 
-      {/* PRICE GRID WITH EXPLANATIONS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+            {/* PRICE GRID (amount inputs only) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
         {/* RESERVE PRICE */}
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">
@@ -1254,35 +1263,83 @@ const [sellForm, setSellForm] = useState({
             step="0.01"
           />
         </div>
-
-        {/* SUMMARY BOX */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700">
-          <p>
-            Listing fee: <strong>£{listingFee.toFixed(2)}</strong>
-          </p>
-          <p>
-            Commission:{" "}
-            <strong>{commissionRate.toFixed(1)}%</strong>
-          </p>
-          <p>
-            Expected return:{" "}
-            <strong>
-              £
-              {expectedReturn > 0
-                ? expectedReturn.toFixed(2)
-                : "0.00"}
-            </strong>
-          </p>
-        </div>
       </div>
 
+      {/* FEES & EXPECTED RETURN SUMMARY – FULL WIDTH, ABOVE NOTE */}
+      <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-800 space-y-2">
+        <p className="font-semibold">
+          Fees &amp; Expected Return (based on your reserve)
+        </p>
+
+        {(() => {
+          const reserve = parseFloat(sellForm.reserve_price as any) || 0;
+          const finalSalePrice = reserve > 0 ? reserve : 0;
+          const commissionAmount =
+            finalSalePrice > 0
+              ? (finalSalePrice * commissionRate) / 100 + listingFee
+              : 0;
+          const estimatedPayout =
+            finalSalePrice > 0 ? finalSalePrice - commissionAmount : 0;
+
+          return (
+            <>
+              <p>
+                <span className="font-semibold">1) Final sale price:</span>{" "}
+                £{finalSalePrice.toFixed(2)}
+                <br />
+                <span className="text-[11px] text-gray-600">
+                  This is based on your reserve price and may change if the
+                  plate sells for more.{" "}
+                  <Link href="/fees" className="underline text-blue-700">
+                    See Fees
+                  </Link>
+                  .
+                </span>
+              </p>
+
+              <p>
+                <span className="font-semibold">2) Sold commission:</span>{" "}
+                £{commissionAmount.toFixed(2)}
+                <br />
+                <span className="text-[11px] text-gray-600">
+                  This is the amount paid to us and is deducted from the
+                  final hammer price.
+                </span>
+              </p>
+
+              <p>
+                <span className="font-semibold">
+                  3) Estimated amount you receive:
+                </span>{" "}
+                £{estimatedPayout.toFixed(2)}
+                <br />
+                <span className="text-[11px] text-gray-600">
+                  This example assumes the plate sells for your reserve. If
+                  bidding goes higher, this figure will increase. Payment is
+                  made once the DVLA transfer has been fully completed.
+                </span>
+              </p>
+            </>
+          );
+        })()}
+      </div>
+
+      {/* NOTE – NOW UNDER THE SUMMARY */}
+      <p className="text-xs text-gray-600 mt-2">
+        <strong>Note:</strong> These examples use your reserve price. Exact
+        figures are confirmed after the auction based on the final hammer
+        price and our fees.
+      </p>
+
       <p className="text-xs text-gray-600 mt-1">
-        <strong>Note:</strong> These calculations are based on your reserve
-        price and will be recalculated when your plate is sold.
+        <strong>Note:</strong> These examples use your reserve price. Exact
+        figures are confirmed after the auction based on the final hammer
+        price and our fees.
       </p>
 
       {/* CHECKBOXES */}
-      <div className="space-y-2 text-xs text-gray-700">
+      <div className="space-y-2 text-xs text-gray-700 mt-4">
+        {/* OWNER CONFIRMATION – REQUIRED */}
         <label className="flex items-start gap-2">
           <input
             type="checkbox"
@@ -1297,6 +1354,7 @@ const [sellForm, setSellForm] = useState({
           </span>
         </label>
 
+        {/* TERMS – REQUIRED */}
         <label className="flex items-start gap-2">
           <input
             type="checkbox"
@@ -1318,7 +1376,7 @@ const [sellForm, setSellForm] = useState({
           </span>
         </label>
 
-        {/* KEEP LISTING UNTIL SOLD */}
+        {/* KEEP LISTING UNTIL SOLD – OPTIONAL */}
         <label className="flex items-start gap-2">
           <input
             type="checkbox"
@@ -2216,26 +2274,25 @@ const [sellForm, setSellForm] = useState({
                         </span>
                       </div>
 
-                      {/* Money summary */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                      {/* SUMMARY BOX */}
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700">
+                      <p>
+                       Listing fee: <strong>£{listingFee.toFixed(2)}</strong>
+                       </p>
                         <p>
-                          <strong>Sale price:</strong> £
-                          {(tx.sale_price ?? 0).toFixed(2)}
+                       Commission:{" "}
+                          <strong>{commissionRate.toFixed(1)}%</strong>
                         </p>
-                        <p>
-                          <strong>Commission:</strong> £
-                          {(tx.commission_amount ?? 0).toFixed(2)} (
-                          {tx.commission_rate ?? 0}%)
-                        </p>
-                        <p>
-                          <strong>Seller payout:</strong> £
-                          {(tx.seller_payout ?? 0).toFixed(2)}
-                        </p>
-                        <p>
-                          <strong>DVLA fee (buyer pays):</strong> £
-                          {(tx.dvla_fee ?? 0).toFixed(2)}
-                        </p>
-                      </div>
+                         <p>
+                         Expected return:{" "}
+                          <strong>
+                         £
+                         {expectedReturn > 0
+                           ? expectedReturn.toFixed(2)
+                         : "0.00"}
+                            </strong>
+                           </p>
+                          </div>
 
                       {/* Dates */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">

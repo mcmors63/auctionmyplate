@@ -22,11 +22,9 @@ export default function Navbar() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        // Try real Appwrite session first
         const current = await account.get();
         setUser(current);
 
-        // Sync localStorage fallback
         if (
           typeof window !== "undefined" &&
           current?.email &&
@@ -35,7 +33,6 @@ export default function Navbar() {
           window.localStorage.setItem("amp_user_email", current.email);
         }
       } catch (err) {
-        // Fallback: check our local login marker
         if (typeof window !== "undefined") {
           const storedEmail = window.localStorage.getItem("amp_user_email");
           if (storedEmail) {
@@ -72,88 +69,114 @@ export default function Navbar() {
   const isAdmin = user?.email === "admin@auctionmyplate.co.uk";
 
   return (
-    <nav className="bg-black text-white shadow-lg">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col gap-2 sm:gap-0 sm:flex-row sm:items-center sm:justify-between">
-        {/* LOGO / BRAND */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex flex-col leading-tight">
-            <span className="text-lg sm:text-xl font-extrabold tracking-tight">
-              <span className="text-white">AuctionMy</span>
-              <span className="text-yellow-400">Plate</span>
-              <span className="hidden sm:inline text-white">.co.uk</span>
-            </span>
-            <span className="hidden sm:block text-[11px] text-gray-400 tracking-[0.18em] uppercase">
-              DVLA-Style Number Plate Auctions
-            </span>
-          </div>
-        </Link>
+    <nav className="bg-black text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shadow-lg">
+      {/* LOGO / BRAND */}
+      <Link href="/" className="flex items-center gap-2">
+        <div className="flex flex-col leading-tight">
+          <span className="text-lg sm:text-xl font-extrabold tracking-tight">
+            <span className="text-white">AuctionMy</span>
+            <span className="text-yellow-400">Plate</span>
+            <span className="hidden sm:inline text-white">.co.uk</span>
+          </span>
+          <span className="hidden sm:block text-[11px] text-gray-400 tracking-[0.18em] uppercase">
+            DVLA-Style Number Plate Auctions
+          </span>
+        </div>
+      </Link>
 
-        {/* NAV LINKS + AUTH – STACK NEATLY ON MOBILE */}
-        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-3 gap-y-1 sm:gap-x-5 text-xs sm:text-sm">
-          {/* Core links */}
-          <Link href="/" className="hover:text-yellow-400">
+      {/* NAV CONTENT */}
+      <div className="flex flex-wrap gap-2 sm:gap-4 items-center text-sm justify-end">
+
+        {/* LEFT: TEXT LINKS IN ORDER */}
+        <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
+          <Link href="/" className="hover:text-yellow-400 text-xs sm:text-sm">
             Home
           </Link>
-          <Link href="/current-listings" className="hover:text-yellow-400">
-            Current Listings
-          </Link>
-          <Link href="/sell-my-plate" className="hover:text-yellow-400">
-            Sell My Plate
-          </Link>
-          <Link href="/about" className="hover:text-yellow-400">
+
+          <Link
+            href="/about"
+            className="hover:text-yellow-400 text-xs sm:text-sm"
+          >
             About
           </Link>
-          <Link href="/fees" className="hover:text-yellow-400">
+
+          <Link
+            href="/fees"
+            className="hover:text-yellow-400 text-xs sm:text-sm"
+          >
             Fees
           </Link>
+        </div>
 
-          {/* DVLA GUIDELINES BUTTON */}
+        {/* MIDDLE: BIG CTA BUTTONS (Current Listings, Sell My Plate, DVLA) */}
+        <div className="flex flex-wrap gap-2 sm:gap-3 items-center ml-1 sm:ml-4">
+          {/* CURRENT LISTINGS – big yellow button */}
           <Link
-            href="/dvla"
-            className="bg-yellow-600 text-black font-semibold px-3 py-1 rounded hover:bg-yellow-500 text-xs sm:text-sm"
+            href="/current-listings"
+            className="whitespace-nowrap bg-yellow-500 text-black font-semibold px-3 sm:px-4 py-1.5 rounded-md hover:bg-yellow-400 text-xs sm:text-sm border border-yellow-300 shadow-sm"
           >
-            DVLA GUIDELINES
+            Current Listings
           </Link>
 
+          {/* SELL MY PLATE – match DVLA button style */}
+          <Link
+            href="/sell-my-plate"
+            className="whitespace-nowrap bg-yellow-600 text-black font-semibold px-3 sm:px-4 py-1.5 rounded-md hover:bg-yellow-500 text-xs sm:text-sm border border-yellow-400 shadow-sm"
+          >
+            Sell My Plate
+          </Link>
+
+          {/* DVLA GUIDELINES – same wrapped button style */}
+          <Link
+            href="/dvla"
+            className="whitespace-nowrap bg-yellow-600 text-black font-semibold px-3 sm:px-4 py-1.5 rounded-md hover:bg-yellow-500 text-xs sm:text-sm border border-yellow-400 shadow-sm"
+          >
+            DVLA Guidelines
+          </Link>
+        </div>
+
+        {/* RIGHT: AUTH + ADMIN AREA */}
+        <div className="flex flex-wrap gap-2 sm:gap-3 items-center ml-1 sm:ml-4">
           {/* ADMIN LINK – ONLY WHEN ADMIN LOGGED IN */}
           {loaded && isAdmin && (
             <Link
               href="/admin"
-              className="text-[11px] sm:text-sm text-gray-300 hover:text-yellow-300 underline"
+              className="text-xs sm:text-sm text-gray-300 hover:text-yellow-300 underline"
             >
               Admin
             </Link>
           )}
 
-          {/* AUTH AREA */}
+          {/* LOGGED OUT – Login/Register in order */}
           {loaded && !user && (
             <>
               <Link
                 href="/login"
-                className="bg-yellow-500 text-black font-semibold px-4 py-2 rounded hover:bg-yellow-400 text-xs sm:text-sm"
+                className="whitespace-nowrap bg-transparent border border-yellow-500 text-yellow-400 px-3 sm:px-4 py-1.5 rounded-md hover:bg-yellow-600 hover:text-black text-xs sm:text-sm"
               >
                 Login
               </Link>
 
               <Link
                 href="/register"
-                className="border border-yellow-500 text-yellow-400 px-4 py-2 rounded hover:bg-yellow-600 hover:text-black text-xs sm:text-sm"
+                className="whitespace-nowrap bg-yellow-500 text-black font-semibold px-3 sm:px-4 py-1.5 rounded-md hover:bg-yellow-400 text-xs sm:text-sm border border-yellow-300"
               >
                 Register
               </Link>
             </>
           )}
 
+          {/* LOGGED IN – Normal user or Admin */}
           {loaded && user && (
             <>
               {isAdmin ? (
                 <>
-                  <span className="hidden sm:inline text-[11px] text-yellow-300">
+                  <span className="hidden sm:inline text-xs text-yellow-300">
                     Hi <strong>Admin</strong>
                   </span>
                   <button
                     onClick={handleLogout}
-                    className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-2 rounded text-xs sm:text-sm"
+                    className="whitespace-nowrap bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm"
                   >
                     Logout
                   </button>
@@ -162,12 +185,12 @@ export default function Navbar() {
                 <>
                   <Link
                     href="/dashboard"
-                    className="hover:text-yellow-300 font-semibold text-xs sm:text-sm"
+                    className="hover:text-yellow-300 font-semibold text-xs sm:text-sm whitespace-nowrap"
                   >
                     Dashboard
                   </Link>
 
-                  <span className="hidden sm:inline text-[11px] text-yellow-300">
+                  <span className="hidden sm:inline text-xs text-yellow-300">
                     Hi{" "}
                     <strong>
                       {user.name ||
@@ -177,7 +200,7 @@ export default function Navbar() {
 
                   <button
                     onClick={handleLogout}
-                    className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-2 rounded text-xs sm:text-sm"
+                    className="whitespace-nowrap bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm"
                   >
                     Logout
                   </button>

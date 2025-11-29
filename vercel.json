@@ -1,8 +1,8 @@
-﻿{
+{
   "crons": [
     {
       "path": "/api/auction-scheduler",
-            "schedule": "*/2 * * * *"
+      "schedule": "* * * * *"
     }
   ]
 }

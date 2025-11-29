@@ -357,6 +357,35 @@ export async function GET() {
           { idempotencyKey }
         );
 
+        // 🔹 NEW: update the plate document with sale info
+        try {
+          const commissionRate = getNumeric(listing.commission_rate); // e.g. 10 = 10%
+          const soldPrice = finalBidAmount;
+          const saleFee =
+            commissionRate > 0 ? (soldPrice * commissionRate) / 100 : 0;
+          const sellerNetAmount = soldPrice - saleFee;
+
+          const buyerId =
+            listing.buyer_id ||
+            listing.highest_bidder ||
+            null;
+
+          await databases.updateDocument(DB_ID, PLATES_COLLECTION_ID, lid, {
+            buyer_email: winnerEmail,
+            buyer_id: buyerId,
+            sold_price: soldPrice,
+            sale_fee: saleFee,
+            seller_net_amount: sellerNetAmount,
+            sale_status: "winner_charged",
+            payout_status: "pending",
+          });
+        } catch (updateErr) {
+          console.error(
+            `Failed to update plate doc for listing ${lid} after charge`,
+            updateErr
+          );
+        }
+
         // ✅ Try to create a transaction document (best-effort, non-fatal)
         await createTransactionForWinner({
           listing,
@@ -376,10 +405,7 @@ export async function GET() {
           paymentStatus: intent.status,
         });
 
-        // We leave status = "completed" for now.
-        // Later we'll add:
-        //  - more transaction states
-        //  - final "completed" emails, etc.
+        // status stays "completed" – sale_status + transactions drive the rest
       } catch (err: any) {
         console.error(
           `Stripe error charging winner for listing ${lid}:`,

@@ -5,26 +5,36 @@ import Stripe from "stripe";
 export const runtime = "nodejs";
 
 // -----------------------------
-// Stripe init
+// Stripe setup
 // -----------------------------
-const stripeSecret = process.env.STRIPE_SECRET_KEY;
+const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 
 if (!stripeSecret) {
-  throw new Error("Missing STRIPE_SECRET_KEY in environment");
+  console.warn(
+    "STRIPE_SECRET_KEY is not set. /api/stripe/charge-off-session will return an error."
+  );
 }
 
-// Use a recent Stripe API version
-const stripe = new Stripe(stripeSecret, {
-  apiVersion: "2024-06-20" as any,
-});
+const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
 
 // -----------------------------
 // POST /api/stripe/charge-off-session
-// Body: { userEmail, amountInPence, description?, metadata? }
+// Charge a saved card off-session for a user
 // -----------------------------
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
+    if (!stripe) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Stripe is not configured on the server.",
+          requiresPaymentMethod: true,
+        },
+        { status: 500 }
+      );
+    }
+
+    const body = await req.json();
     const {
       userEmail,
       amountInPence,
@@ -32,74 +42,61 @@ export async function POST(req: Request) {
       metadata,
     }: {
       userEmail?: string;
-      amountInPence?: number | string;
+      amountInPence?: number;
       description?: string;
       metadata?: Record<string, string>;
     } = body;
 
-    if (!userEmail || amountInPence == null) {
+    if (!userEmail || !amountInPence) {
       return NextResponse.json(
-        { error: "Missing userEmail or amountInPence" },
+        {
+          ok: false,
+          error: "Missing userEmail or amountInPence.",
+        },
         { status: 400 }
       );
     }
 
-    const amount = Math.round(Number(amountInPence));
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return NextResponse.json(
-        { error: "Invalid amountInPence" },
-        { status: 400 }
-      );
-    }
-
-    // 1) Find (or create) the customer by email
+    // 1) Find or create customer by email
     const existing = await stripe.customers.list({
       email: userEmail,
       limit: 1,
     });
 
     let customer = existing.data[0];
-
     if (!customer) {
-      customer = await stripe.customers.create({
-        email: userEmail,
-      });
+      customer = await stripe.customers.create({ email: userEmail });
     }
 
-    // 2) Get the saved card payment method
-    const paymentMethods = await stripe.paymentMethods.list({
+    // 2) Get a saved card for this customer
+    const pmList = await stripe.paymentMethods.list({
       customer: customer.id,
       type: "card",
-      limit: 1,
     });
 
-    if (!paymentMethods.data.length) {
+    if (!pmList.data.length) {
       return NextResponse.json(
         {
-          error:
-            "No saved card found for this customer. Ask the user to add a payment method first.",
+          ok: false,
+          error: "No saved card found for this customer.",
           requiresPaymentMethod: true,
         },
-        { status: 402 }
+        { status: 400 }
       );
     }
 
-    const paymentMethod = paymentMethods.data[0];
+    const paymentMethod = pmList.data[0];
 
-    // 3) Create + confirm off-session PaymentIntent
+    // 3) Create an off-session PaymentIntent and confirm it
     const intent = await stripe.paymentIntents.create({
-      amount,
+      amount: amountInPence,
       currency: "gbp",
       customer: customer.id,
       payment_method: paymentMethod.id,
-      confirm: true,
       off_session: true,
-      description: description || "AuctionMyPlate charge",
-      metadata: {
-        email: userEmail,
-        source: "auctionmyplate",
-        ...(metadata || {}),
-      },
+      confirm: true,
+      description: description || undefined,
+      metadata: metadata || {},
     });
 
     return NextResponse.json({
@@ -110,23 +107,21 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("charge-off-session error:", err);
 
-    // Stripe card errors often include payment_intent info
-    const stripeError = err as Stripe.StripeError & {
-      raw?: { payment_intent?: Stripe.PaymentIntent };
-    };
+    const anyErr = err as any;
+    const pi = anyErr?.raw?.payment_intent;
 
-    const base: any = {
-      error: stripeError.message || "Stripe charge failed.",
-      type: stripeError.type,
-      code: (stripeError as any).code,
-    };
-
-    if (stripeError.raw?.payment_intent) {
-      base.paymentIntentId = stripeError.raw.payment_intent.id;
-      base.paymentIntentStatus = stripeError.raw.payment_intent.status;
-    }
-
-    // 402 = payment required
-    return NextResponse.json(base, { status: 402 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: anyErr?.message || "Stripe charge failed.",
+        requiresPaymentMethod:
+          anyErr?.code === "authentication_required" ||
+          anyErr?.code === "card_declined" ||
+          false,
+        paymentIntentId: pi?.id,
+        paymentIntentStatus: pi?.status,
+      },
+      { status: 400 }
+    );
   }
 }

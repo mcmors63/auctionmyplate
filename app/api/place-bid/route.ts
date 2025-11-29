@@ -103,9 +103,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // -----------------------------
     // Safety check: auction_end not in the past
+    // -----------------------------
     const auctionEnd =
-      listing.auction_end ?? listing.end_time ?? listing["auctionEnd"];
+      listing.auction_end ??
+      listing.end_time ??
+      null;
+
     if (auctionEnd) {
       const endMs = Date.parse(auctionEnd);
       if (Number.isFinite(endMs) && endMs <= Date.now()) {
@@ -139,7 +144,7 @@ export async function POST(req: Request) {
     // -----------------------------
     // Create bid document in BIDS collection
     // (history of all bids on this listing)
-// -----------------------------
+    // -----------------------------
     let bidDoc: any = null;
 
     try {

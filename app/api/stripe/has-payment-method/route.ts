@@ -9,6 +9,14 @@ export const runtime = "nodejs";
 // -----------------------------
 const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 
+// 🔍 DEBUG: log what the server sees (length only, not the key itself)
+console.log(
+  "[has-payment-method] STRIPE_SECRET_KEY length:",
+  stripeSecret.length,
+  "ENV:",
+  process.env.VERCEL_ENV || process.env.NODE_ENV
+);
+
 if (!stripeSecret) {
   console.warn(
     "STRIPE_SECRET_KEY is not set. /api/stripe/has-payment-method will always fail."
@@ -19,7 +27,6 @@ const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
 
 // -----------------------------
 // POST /api/stripe/has-payment-method
-// Checks whether a customer (by email) has at least one saved card
 // -----------------------------
 export async function POST(req: Request) {
   try {
@@ -54,7 +61,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Try to find an existing customer by email
     const existing = await stripe.customers.list({
       email: userEmail,
       limit: 1,
@@ -62,7 +68,6 @@ export async function POST(req: Request) {
 
     let customer = existing.data[0];
 
-    // If none found, then definitely no saved card
     if (!customer) {
       return NextResponse.json(
         {
@@ -73,7 +78,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) List card payment methods for this customer
     const methods = await stripe.paymentMethods.list({
       customer: customer.id,
       type: "card",

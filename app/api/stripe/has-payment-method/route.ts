@@ -2,74 +2,102 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-export const runtime = "nodejs";       // ✅ for Stripe on Next/Vercel
-export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-const stripeSecret = process.env.STRIPE_SECRET_KEY;
+// -----------------------------
+// Stripe setup
+// -----------------------------
+const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 
+if (!stripeSecret) {
+  console.warn(
+    "STRIPE_SECRET_KEY is not set. /api/stripe/has-payment-method will always fail."
+  );
+}
+
+const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
+
+// -----------------------------
+// POST /api/stripe/has-payment-method
+// Checks whether a customer (by email) has at least one saved card
+// -----------------------------
 export async function POST(req: Request) {
-  // ✅ Never throw at the top level – always return JSON
-  if (!stripeSecret) {
-    console.error("STRIPE_SECRET_KEY is not set in the environment");
-    return NextResponse.json(
-      {
-        error: "Payment configuration error. Please contact support.",
-        code: "NO_STRIPE_KEY",
-      },
-      { status: 500 }
-    );
-  }
-
-  const stripe = new Stripe(stripeSecret, {
-    apiVersion: "2024-06-20",
-  });
-
   try {
-    const { userEmail } = await req.json();
+    if (!stripe) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Stripe is not configured on the server.",
+          hasPaymentMethod: false,
+        },
+        { status: 500 }
+      );
+    }
+
+    const body = await req.json();
+    const {
+      userEmail,
+      userId,
+    }: {
+      userEmail?: string;
+      userId?: string | null;
+    } = body;
 
     if (!userEmail) {
       return NextResponse.json(
-        { error: "Missing userEmail" },
+        {
+          ok: false,
+          error: "Missing userEmail.",
+          hasPaymentMethod: false,
+        },
         { status: 400 }
       );
     }
 
-    // 1) Find or create Stripe customer
-    const existingCustomers = await stripe.customers.list({
+    // 1) Try to find an existing customer by email
+    const existing = await stripe.customers.list({
       email: userEmail,
       limit: 1,
     });
 
-    let customer: Stripe.Customer;
+    let customer = existing.data[0];
 
-    if (existingCustomers.data.length > 0) {
-      customer = existingCustomers.data[0];
-    } else {
-      customer = await stripe.customers.create({
-        email: userEmail,
-        metadata: {
-          appwriteUserEmail: userEmail,
+    // If none found, then definitely no saved card
+    if (!customer) {
+      return NextResponse.json(
+        {
+          ok: true,
+          hasPaymentMethod: false,
         },
-      });
+        { status: 200 }
+      );
     }
 
-    // 2) Check for at least one attached card
-    const paymentMethods = await stripe.paymentMethods.list({
+    // 2) List card payment methods for this customer
+    const methods = await stripe.paymentMethods.list({
       customer: customer.id,
       type: "card",
       limit: 1,
     });
 
-    const hasPaymentMethod = paymentMethods.data.length > 0;
+    const hasPaymentMethod = methods.data.length > 0;
 
-    return NextResponse.json({
-      hasPaymentMethod,
-      customerId: customer.id,
-    });
-  } catch (err: any) {
-    console.error("Stripe has-payment-method error:", err);
     return NextResponse.json(
-      { error: "Failed to check payment methods" },
+      {
+        ok: true,
+        hasPaymentMethod,
+      },
+      { status: 200 }
+    );
+  } catch (err: any) {
+    console.error("has-payment-method error:", err);
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: err?.message || "Could not verify payment method.",
+        hasPaymentMethod: false,
+      },
       { status: 500 }
     );
   }

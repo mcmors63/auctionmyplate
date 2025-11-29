@@ -104,20 +104,37 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------
-    // Safety check: auction_end not in the past
+    // Safety check & SOFT CLOSE
     // -----------------------------
+    const nowMs = Date.now();
     const auctionEnd =
       listing.auction_end ??
       listing.end_time ??
       null;
 
+    let newAuctionEnd: string | null = null;
+
     if (auctionEnd) {
       const endMs = Date.parse(auctionEnd);
-      if (Number.isFinite(endMs) && endMs <= Date.now()) {
-        return NextResponse.json(
-          { error: "Auction has already ended." },
-          { status: 400 }
-        );
+
+      if (Number.isFinite(endMs)) {
+        // Hard stop: auction already ended
+        if (endMs <= nowMs) {
+          return NextResponse.json(
+            { error: "Auction has already ended." },
+            { status: 400 }
+          );
+        }
+
+        // 🕐 SOFT CLOSE – extend by 5 minutes if < 2 minutes left
+        const remainingMs = endMs - nowMs;
+        const TWO_MINUTES = 2 * 60 * 1000;
+        const FIVE_MINUTES = 5 * 60 * 1000;
+
+        if (remainingMs > 0 && remainingMs <= TWO_MINUTES) {
+          const extendedEnd = new Date(nowMs + FIVE_MINUTES);
+          newAuctionEnd = extendedEnd.toISOString();
+        }
       }
     }
 
@@ -155,9 +172,9 @@ export async function POST(req: Request) {
         {
           listing_id: listing.$id,
           amount: bidAmount,
-          timestamp: new Date().toISOString(), // REQUIRED field in your bids schema
+          timestamp: new Date().toISOString(),
           bidder_email: userEmail,
-          bidder_id: userId ?? null,
+          // ❌ no bidder_id – avoids schema mismatch
         }
       );
     } catch (err) {
@@ -166,19 +183,25 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------
-    // Update listing current_bid + bids count
+    // Update listing current_bid + bids count (+ soft-close extension)
     // -----------------------------
     const newBidsCount =
       typeof listing.bids === "number" ? listing.bids + 1 : 1;
+
+    const updatePayload: any = {
+      current_bid: bidAmount,
+      bids: newBidsCount,
+    };
+
+    if (newAuctionEnd) {
+      updatePayload.auction_end = newAuctionEnd;
+    }
 
     const updatedListing = await databases.updateDocument(
       DB_ID,
       PLATES_COLLECTION,
       listing.$id,
-      {
-        current_bid: bidAmount,
-        bids: newBidsCount,
-      }
+      updatePayload
     );
 
     return NextResponse.json({

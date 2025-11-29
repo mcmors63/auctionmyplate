@@ -1,6 +1,6 @@
 // app/api/auction-scheduler/route.ts
 import { NextResponse } from "next/server";
-import { Client, Databases, Query } from "node-appwrite";
+import { Client, Databases, Query, ID } from "node-appwrite"; // 👈 MUST be node-appwrite
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -25,10 +25,14 @@ const PLATES_COLLECTION_ID =
 // BIDS collection (same DB)
 const BIDS_COLLECTION_ID =
   process.env.NEXT_PUBLIC_APPWRITE_BIDS_COLLECTION_ID ||
-  process.env.APPWRITE_BIDS_COLLECTION_ID || "";
+  process.env.APPWRITE_BIDS_COLLECTION_ID ||
+  "";
 
-// STRIPE
-const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
+// TRANSACTIONS collection (same DB)
+const TRANSACTIONS_COLLECTION_ID =
+  process.env.APPWRITE_TRANSACTIONS_COLLECTION_ID ||
+  process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID ||
+  "";
 
 const client = new Client()
   .setEndpoint(endpoint)
@@ -37,10 +41,11 @@ const client = new Client()
 
 const databases = new Databases(client);
 
-// Make Stripe client lazily, only if key exists
-const stripe = stripeSecret
-  ? new Stripe(stripeSecret, { apiVersion: "2024-06-20" as any })
-  : null;
+// -----------------------------
+// STRIPE
+// -----------------------------
+const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
+const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
 
 // -----------------------------
 // SMALL HELPERS
@@ -60,6 +65,66 @@ function parseTimestamp(ts: any): number {
   if (!ts || typeof ts !== "string") return 0;
   const t = Date.parse(ts);
   return Number.isFinite(t) ? t : 0;
+}
+
+// -----------------------------
+// Helper: create transaction doc (best-effort)
+// -----------------------------
+async function createTransactionForWinner(params: {
+  listing: any;
+  finalBidAmount: number;
+  totalWithDvla: number;
+  winnerEmail: string;
+  paymentIntentId: string;
+}) {
+  if (!TRANSACTIONS_COLLECTION_ID) {
+    console.warn(
+      "No TRANSACTIONS_COLLECTION_ID configured; skipping transaction creation."
+    );
+    return;
+  }
+
+  const { listing, finalBidAmount, totalWithDvla, winnerEmail, paymentIntentId } =
+    params;
+
+  const listingId = listing.$id as string;
+  const reg = (listing.registration as string | undefined) || "";
+  const listingRef =
+    (listing.listing_id as string | undefined) || listingId;
+
+  const sellerEmail =
+    (listing.seller_email as string | undefined) || "";
+
+  const data: Record<string, any> = {
+    listing_id: listingId,
+    listing_ref: listingRef,
+    registration: reg,
+    buyer_email: winnerEmail,
+    seller_email: sellerEmail,
+    final_bid: finalBidAmount,
+    dvla_fee: DVLA_FEE_GBP,
+    total_charged: totalWithDvla,
+    stripe_payment_intent_id: paymentIntentId,
+    status: "pending_documents",
+    source: "auction_scheduler",
+    type: "auction_winner",
+  };
+
+  try {
+    await databases.createDocument(
+      DB_ID,
+      TRANSACTIONS_COLLECTION_ID,
+      ID.unique(),
+      data
+    );
+  } catch (err) {
+    console.error(
+      "Failed to create transaction document for listing",
+      listingId,
+      err
+    );
+    // Don't throw – Stripe has already charged the buyer, we must not blow up the scheduler.
+  }
 }
 
 // -----------------------------
@@ -87,9 +152,14 @@ export async function GET() {
 
     let promoted = 0;
     for (const doc of queuedRes.documents as any[]) {
-      await databases.updateDocument(DB_ID, PLATES_COLLECTION_ID, doc.$id, {
-        status: "live",
-      });
+      await databases.updateDocument(
+        DB_ID,
+        PLATES_COLLECTION_ID,
+        doc.$id,
+        {
+          status: "live",
+        }
+      );
       promoted++;
     }
 
@@ -166,10 +236,11 @@ export async function GET() {
       // ---- Load bids for this listing ----
       let bidsRes;
       try {
-        bidsRes = await databases.listDocuments(DB_ID, BIDS_COLLECTION_ID, [
-          Query.equal("listing_id", lid),
-          Query.limit(1000),
-        ]);
+        bidsRes = await databases.listDocuments(
+          DB_ID,
+          BIDS_COLLECTION_ID,
+          [Query.equal("listing_id", lid), Query.limit(1000)]
+        );
       } catch (err) {
         console.error(
           `Failed to list bids for listing ${lid}. Check BIDS indexes/attributes.`,
@@ -286,6 +357,15 @@ export async function GET() {
           { idempotencyKey }
         );
 
+        // ✅ Try to create a transaction document (best-effort, non-fatal)
+        await createTransactionForWinner({
+          listing,
+          finalBidAmount,
+          totalWithDvla,
+          winnerEmail,
+          paymentIntentId: intent.id,
+        });
+
         winnerCharges.push({
           listingId: lid,
           charged: true,
@@ -296,9 +376,15 @@ export async function GET() {
           paymentStatus: intent.status,
         });
 
-        // status stays "completed" – further workflow handled elsewhere
+        // We leave status = "completed" for now.
+        // Later we'll add:
+        //  - more transaction states
+        //  - final "completed" emails, etc.
       } catch (err: any) {
-        console.error(`Stripe error charging winner for listing ${lid}:`, err);
+        console.error(
+          `Stripe error charging winner for listing ${lid}:`,
+          err
+        );
         const entry: any = {
           listingId: lid,
           charged: false,

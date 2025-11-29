@@ -158,10 +158,21 @@ export default function PlaceBidPage() {
         setHasPaymentMethod(Boolean(data.hasPaymentMethod));
       } catch (err: any) {
         console.error("has-payment-method error:", err);
-        setPaymentMethodError(
-          err.message || "Could not verify your payment method."
-        );
-        setHasPaymentMethod(null);
+
+        const msg =
+          err?.message || "Could not verify your payment method.";
+
+        // IMPORTANT:
+        // If the backend is just telling us that Stripe isn't configured,
+        // don't scare the user with a big red banner. Treat it as
+        // "no payment info" and carry on – bidding is still allowed.
+        if (msg.includes("Stripe is not configured on the server")) {
+          setPaymentMethodError(null);
+          setHasPaymentMethod(null);
+        } else {
+          setPaymentMethodError(msg);
+          setHasPaymentMethod(null);
+        }
       } finally {
         setCheckingPaymentMethod(false);
       }
@@ -233,13 +244,10 @@ export default function PlaceBidPage() {
     listing.listing_id || `AMP-${listing.$id.slice(-6).toUpperCase()}`;
 
   // Timer props for AdminAuctionTimer – match current-listings card
-  const auctionStart =
-    listing.auction_start ?? listing.start_time ?? null;
+  const auctionStart = listing.auction_start ?? listing.start_time ?? null;
+  const auctionEnd = listing.auction_end ?? listing.end_time ?? null;
 
-  const auctionEnd =
-    listing.auction_end ?? listing.end_time ?? null;
-
-  // ---- NEW: detect if the auction has actually ended based on time ----
+  // ---- detect if the auction has actually ended based on time ----
   const auctionEndMs = auctionEnd ? Date.parse(auctionEnd) : null;
   const auctionEnded =
     auctionEndMs !== null && Number.isFinite(auctionEndMs)
@@ -541,7 +549,7 @@ export default function PlaceBidPage() {
           )}
         </div>
 
-        {/* TIMER SECTION – uses same AdminAuctionTimer as listing cards */}
+        {/* TIMER SECTION */}
         <div>
           <p className="text-xs text-gray-500 uppercase">{timerLabel}</p>
           <div className="inline-block mt-1 px-3 py-2 bg-white border border-black rounded-lg shadow-sm font-semibold text-black">

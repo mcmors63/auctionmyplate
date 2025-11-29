@@ -1,7 +1,6 @@
 // app/api/buy-now/route.ts
 import { NextResponse } from "next/server";
 import { Client, Databases, ID } from "node-appwrite";
-import Stripe from "stripe";
 import nodemailer from "nodemailer";
 
 export const runtime = "nodejs";
@@ -20,8 +19,6 @@ const PLATES_COLLECTION = process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!
 // Transactions live in same DB, separate collection
 const TRANSACTIONS_COLLECTION =
   process.env.APPWRITE_TRANSACTIONS_COLLECTION_ID || "";
-
-const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
 
 // Email config
 const smtpHost = process.env.SMTP_HOST;
@@ -311,9 +308,21 @@ AuctionMyPlate
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { listingId, userId, userEmail } = body || {};
+    const {
+      listingId,
+      userId,
+      userEmail,
+      paymentIntentId,
+      totalCharged,
+    } = body || {};
 
-    console.log("buy-now incoming:", { listingId, userId, userEmail });
+    console.log("buy-now incoming:", {
+      listingId,
+      userId,
+      userEmail,
+      paymentIntentId,
+      totalCharged,
+    });
 
     // -----------------------------
     // BASIC VALIDATION
@@ -336,57 +345,6 @@ export async function POST(req: Request) {
       typeof userId === "string" && userId.trim().length > 0
         ? userId
         : "unknown";
-
-    // -----------------------------
-    // STRIPE: MUST HAVE PAYMENT METHOD
-    // -----------------------------
-    if (!stripeSecret) {
-      console.error("STRIPE_SECRET_KEY is not set");
-      return NextResponse.json(
-        {
-          error: "Payment configuration error. Please contact support.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const stripe = new Stripe(stripeSecret, {});
-
-    // Find or create customer by email
-    const existingCustomers = await stripe.customers.list({
-      email: userEmail,
-      limit: 1,
-    });
-
-    let customer: Stripe.Customer;
-    if (existingCustomers.data.length > 0) {
-      customer = existingCustomers.data[0];
-    } else {
-      customer = await stripe.customers.create({
-        email: userEmail,
-        metadata: {
-          appwriteUserId: finalUserId,
-        },
-      });
-    }
-
-    // Must have at least one attached card
-    const paymentMethods = await stripe.paymentMethods.list({
-      customer: customer.id,
-      type: "card",
-      limit: 1,
-    });
-
-    if (paymentMethods.data.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "You must add a payment method before using Buy Now. Please add a card and try again.",
-          requiresPaymentMethod: true,
-        },
-        { status: 400 }
-      );
-    }
 
     // -----------------------------
     // LOAD LISTING
@@ -453,14 +411,13 @@ export async function POST(req: Request) {
 
     // -----------------------------
     // CREATE TRANSACTION (if configured)
-// -----------------------------
+    // -----------------------------
     const listingRef =
-      listing.listing_id || `AMP-${String(listing.$id).slice(-6).toUpperCase()}`;
+      listing.listing_id ||
+      `AMP-${String(listing.$id).slice(-6).toUpperCase()}`;
 
     const sellerEmail: string | null =
-      typeof listing.seller_email === "string"
-        ? listing.seller_email
-        : null;
+      typeof listing.seller_email === "string" ? listing.seller_email : null;
 
     let transactionDoc: any = null;
 
@@ -482,9 +439,13 @@ export async function POST(req: Request) {
             final_price: buyNowPrice,
             dvla_fee: dvlaFee,
             total_payable: totalPayable,
+            total_charged: typeof totalCharged === "number" ? totalCharged : null,
+            payment_intent_id:
+              typeof paymentIntentId === "string" ? paymentIntentId : null,
             status: "pending_docs",
             channel: "buy_now",
             timestamp: new Date().toISOString(),
+            buyer_appwrite_id: finalUserId,
           }
         );
 
@@ -501,7 +462,7 @@ export async function POST(req: Request) {
 
     // -----------------------------
     // SEND EMAILS (non-blocking)
-// -----------------------------
+    // -----------------------------
     sendSaleEmails({
       registration: listing.registration,
       listingRef,
@@ -521,7 +482,6 @@ export async function POST(req: Request) {
       console.error("[buy-now] sendDocRequestEmails threw:", err);
     });
 
-    // Still not charging the card yet – PaymentIntent logic will come later.
     return NextResponse.json({
       ok: true,
       updatedListing,

@@ -14,7 +14,7 @@ import {
 import { Client, Account } from "appwrite";
 
 // -----------------------------
-// ENV / Appwrite client
+// ENV / Appwrite client / Stripe
 // -----------------------------
 const stripePublishableKey =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";
@@ -38,6 +38,15 @@ type UserInfo = {
   name?: string;
 };
 
+type PaymentMethodSummary = {
+  id: string;
+  brand: string | null;
+  last4: string | null;
+  exp_month: number | null;
+  exp_year: number | null;
+  isDefault: boolean;
+};
+
 // -----------------------------
 // Inner form component
 // -----------------------------
@@ -51,6 +60,42 @@ function PaymentMethodForm({ user }: { user: UserInfo }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [methodsLoading, setMethodsLoading] = useState(true);
+  const [methodsError, setMethodsError] = useState<string | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<
+    PaymentMethodSummary[]
+  >([]);
+
+  // Helper: load saved payment methods
+  const fetchPaymentMethods = async () => {
+    try {
+      setMethodsLoading(true);
+      setMethodsError(null);
+
+      const res = await fetch("/api/stripe/list-payment-methods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userEmail: user.email }),
+      });
+
+      const data = await res.json().catch(() => ({} as any));
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to load saved cards.");
+      }
+
+      setPaymentMethods(data.paymentMethods || []);
+    } catch (err: any) {
+      console.error("list-payment-methods error:", err);
+      setMethodsError(
+        err?.message || "We couldn't load your saved cards. Please try again."
+      );
+      setPaymentMethods([]);
+    } finally {
+      setMethodsLoading(false);
+    }
+  };
 
   // Create SetupIntent when page loads
   useEffect(() => {
@@ -88,6 +133,12 @@ function PaymentMethodForm({ user }: { user: UserInfo }) {
     };
 
     createSetupIntent();
+  }, [user.email]);
+
+  // Load saved cards on mount
+  useEffect(() => {
+    fetchPaymentMethods();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,7 +179,6 @@ function PaymentMethodForm({ user }: { user: UserInfo }) {
       console.log("confirmCardSetup result:", result);
 
       if (result.error) {
-        // Show as much info as possible
         const msg =
           result.error.message ||
           result.error.code ||
@@ -149,7 +199,13 @@ function PaymentMethodForm({ user }: { user: UserInfo }) {
         return;
       }
 
-      setSuccess("Card saved successfully. You can now place bids and use Buy Now.");
+      setSuccess(
+        "Card saved successfully. You can now place bids and use Buy Now."
+      );
+
+      // Refresh saved cards list
+      await fetchPaymentMethods();
+
       // Optional: go back automatically after a short delay
       setTimeout(() => {
         router.push("/current-listings");
@@ -164,12 +220,55 @@ function PaymentMethodForm({ user }: { user: UserInfo }) {
 
   return (
     <div className="max-w-md mx-auto bg-white border border-gray-300 rounded-xl shadow-sm p-6 space-y-4">
-      <h1 className="text-xl font-bold">Add a payment method</h1>
+      <h1 className="text-xl font-bold">Payment Methods</h1>
 
       <p className="text-sm text-gray-700">
-        We securely store your card with Stripe. Your card will only be charged if
-        you win an auction or use Buy Now.
+        We securely store your card with Stripe. Your card will only be charged
+        if you win an auction or use Buy Now.
       </p>
+
+      {/* Saved cards section */}
+      <div className="mt-2 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">
+        <h2 className="text-sm font-semibold text-gray-900 mb-1">
+          Your saved cards
+        </h2>
+
+        {methodsLoading ? (
+          <p className="text-xs text-gray-600">Loading saved cards…</p>
+        ) : methodsError ? (
+          <p className="text-xs text-red-600">{methodsError}</p>
+        ) : paymentMethods.length === 0 ? (
+          <p className="text-xs text-gray-600">
+            You don&apos;t have any cards saved yet. Add one below.
+          </p>
+        ) : (
+          <ul className="space-y-1 text-xs text-gray-700">
+            {paymentMethods.map((pm) => (
+              <li
+                key={pm.id}
+                className="flex justify-between items-center border border-gray-200 rounded-md px-2 py-1 bg-white"
+              >
+                <div>
+                  <span className="font-semibold">
+                    {pm.brand ? pm.brand.toUpperCase() : "Card"}
+                  </span>{" "}
+                  •••• {pm.last4 || "????"}
+                  {pm.exp_month && pm.exp_year && (
+                    <span className="ml-2 text-gray-500">
+                      (expires {pm.exp_month}/{pm.exp_year})
+                    </span>
+                  )}
+                </div>
+                {pm.isDefault && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">
+                    DEFAULT
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {error && (
         <p className="bg-red-50 text-red-700 border border-red-200 p-3 rounded text-sm">
@@ -184,7 +283,9 @@ function PaymentMethodForm({ user }: { user: UserInfo }) {
       )}
 
       {loading ? (
-        <p className="text-sm text-gray-600">Preparing secure payment form…</p>
+        <p className="text-sm text-gray-600">
+          Preparing secure payment form…
+        </p>
       ) : !clientSecret ? (
         <p className="text-sm text-red-600">
           We couldn&apos;t start the card setup process.
@@ -244,7 +345,6 @@ export default function PaymentMethodPage() {
         setLoadingUser(true);
         setLoginError(null);
 
-        // Same pattern as navbar / place_bid: try localStorage first
         let email: string | null = null;
         let id: string | null = null;
         let name: string | undefined = undefined;
@@ -255,7 +355,6 @@ export default function PaymentMethodPage() {
         }
 
         if (!email || !id) {
-          // Fallback to Appwrite account
           const current = await account.get();
           email = current.email;
           id = current.$id;
@@ -285,7 +384,6 @@ export default function PaymentMethodPage() {
     loadUser();
   }, []);
 
-  // No publishable key configured
   if (!stripePublishableKey) {
     return (
       <main className="min-h-screen bg-[#F5F5F5] flex items-center justify-center px-4">
@@ -294,8 +392,8 @@ export default function PaymentMethodPage() {
             Stripe publishable key not configured
           </h1>
           <p className="text-sm text-gray-700">
-            Set <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> in your environment
-            variables to use this page.
+            Set <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> in your
+            environment variables to use this page.
           </p>
         </div>
       </main>

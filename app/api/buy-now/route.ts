@@ -425,6 +425,7 @@ export async function POST(req: Request) {
       try {
         const dvlaFee = 80;
         const totalPayable = buyNowPrice + dvlaFee;
+        const nowIso = new Date().toISOString();
 
         transactionDoc = await databases.createDocument(
           PLATES_DB,
@@ -439,12 +440,19 @@ export async function POST(req: Request) {
             final_price: buyNowPrice,
             dvla_fee: dvlaFee,
             total_payable: totalPayable,
-            total_charged: typeof totalCharged === "number" ? totalCharged : null,
+            total_charged:
+              typeof totalCharged === "number" ? totalCharged : null,
             payment_intent_id:
               typeof paymentIntentId === "string" ? paymentIntentId : null,
+
+            // 🔐 NEW: record Stripe payment + transaction state
+            payment_status: "paid",
+            transaction_status: "awaiting_documents",
+
+            // Existing generic status field (keep for compatibility)
             status: "pending_docs",
             channel: "buy_now",
-            timestamp: new Date().toISOString(),
+            timestamp: nowIso,
             buyer_appwrite_id: finalUserId,
           }
         );

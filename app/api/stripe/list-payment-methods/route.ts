@@ -1,17 +1,14 @@
-// app/api/stripe/create-setup-intent/route.ts
+// app/api/stripe/list-payment-methods/route.ts
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { Client as AppwriteClient, Databases, Query } from "node-appwrite";
 
 export const runtime = "nodejs";
 
-// -----------------------------
-// ENV
-// -----------------------------
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 if (!stripeSecretKey) {
   console.warn(
-    "[create-setup-intent] STRIPE_SECRET_KEY is not set. This route will fail."
+    "[list-payment-methods] STRIPE_SECRET_KEY is not set. This route will fail."
   );
 }
 
@@ -52,14 +49,11 @@ function getAppwrite() {
   return { databases };
 }
 
-// -----------------------------
-// POST
-// -----------------------------
 export async function POST(req: Request) {
   try {
     if (!stripeSecretKey) {
       return NextResponse.json(
-        { error: "Stripe is not configured on the server." },
+        { ok: false, error: "Stripe is not configured on the server." },
         { status: 500 }
       );
     }
@@ -70,14 +64,13 @@ export async function POST(req: Request) {
 
     if (!userEmail) {
       return NextResponse.json(
-        { error: "Missing userEmail." },
+        { ok: false, error: "Missing userEmail." },
         { status: 400 }
       );
     }
 
     const { databases } = getAppwrite();
 
-    // 1) Find profile by email
     const profRes = await databases.listDocuments(
       PROFILES_DB_ID,
       PROFILES_COLLECTION_ID,
@@ -85,56 +78,52 @@ export async function POST(req: Request) {
     );
 
     if (!profRes.documents.length) {
-      return NextResponse.json(
-        { error: "Profile not found for this user." },
-        { status: 404 }
-      );
+      // No profile = no cards
+      return NextResponse.json({ ok: true, paymentMethods: [] });
     }
 
     const profile = profRes.documents[0] as any;
-
-    // 2) Ensure Stripe Customer
-    let stripeCustomerId: string | null = profile.stripe_customer_id || null;
+    const stripeCustomerId: string | null = profile.stripe_customer_id || null;
 
     if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: userEmail,
-        metadata: {
-          appwrite_profile_id: profile.$id,
-          appwrite_email: userEmail,
-        },
-      });
-
-      stripeCustomerId = customer.id;
-
-      await databases.updateDocument(
-        PROFILES_DB_ID,
-        PROFILES_COLLECTION_ID,
-        profile.$id,
-        {
-          stripe_customer_id: stripeCustomerId,
-        }
-      );
+      // No customer yet = no cards
+      return NextResponse.json({ ok: true, paymentMethods: [] });
     }
 
-    // 3) Create SetupIntent
-    const setupIntent = await stripe.setupIntents.create({
+    // Fetch customer to know default payment method
+    const customer = await stripe.customers.retrieve(stripeCustomerId);
+    let defaultPmId: string | null = null;
+
+    if (!("deleted" in customer)) {
+      const invoiceSettings = customer.invoice_settings;
+      const defPm = invoiceSettings?.default_payment_method as
+        | string
+        | { id: string }
+        | null
+        | undefined;
+      if (typeof defPm === "string") defaultPmId = defPm;
+      else if (defPm && typeof defPm === "object") defaultPmId = defPm.id;
+    }
+
+    const pmList = await stripe.paymentMethods.list({
       customer: stripeCustomerId,
-      payment_method_types: ["card"],
+      type: "card",
     });
 
-    if (!setupIntent.client_secret) {
-      return NextResponse.json(
-        { error: "Stripe did not return a client_secret." },
-        { status: 500 }
-      );
-    }
+    const paymentMethods = pmList.data.map((pm) => ({
+      id: pm.id,
+      brand: pm.card?.brand ?? null,
+      last4: pm.card?.last4 ?? null,
+      exp_month: pm.card?.exp_month ?? null,
+      exp_year: pm.card?.exp_year ?? null,
+      isDefault: pm.id === defaultPmId,
+    }));
 
-    return NextResponse.json({ clientSecret: setupIntent.client_secret });
+    return NextResponse.json({ ok: true, paymentMethods });
   } catch (err: any) {
-    console.error("[create-setup-intent] error:", err);
+    console.error("[list-payment-methods] error:", err);
     return NextResponse.json(
-      { error: err?.message || "Failed to create setup intent." },
+      { ok: false, error: err?.message || "Failed to list payment methods." },
       { status: 500 }
     );
   }

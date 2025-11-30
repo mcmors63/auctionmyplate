@@ -25,6 +25,7 @@ export default function Navbar() {
         const current = await account.get();
         setUser(current);
 
+        // Cache email locally so we can still show "Hi [name]" if session expires
         if (
           typeof window !== "undefined" &&
           current?.email &&
@@ -33,6 +34,7 @@ export default function Navbar() {
           window.localStorage.setItem("amp_user_email", current.email);
         }
       } catch (err) {
+        // No active Appwrite session – fall back to any cached email if present
         if (typeof window !== "undefined") {
           const storedEmail = window.localStorage.getItem("amp_user_email");
           if (storedEmail) {
@@ -51,7 +53,7 @@ export default function Navbar() {
     loadUser();
   }, [pathname]);
 
-   // --------------------------------------------------------
+  // --------------------------------------------------------
   // LOGOUT
   // --------------------------------------------------------
   const handleLogout = async () => {
@@ -118,6 +120,10 @@ export default function Navbar() {
         </Link>
         <Link href="/dvla" className={navLinkDefault}>
           DVLA Guidelines
+        </Link>
+        {/* ✅ New FAQ link */}
+        <Link href="/faq" className={navLinkDefault}>
+          FAQ
         </Link>
 
         {/* ADMIN LINK – ONLY WHEN ADMIN LOGGED IN */}

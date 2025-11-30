@@ -33,6 +33,13 @@ export default function Footer() {
           >
             Cookie Policy
           </Link>
+          {" · "}
+          <Link
+            href="/contact"
+            className="underline hover:text-yellow-200 transition"
+          >
+            Contact Us
+          </Link>
         </p>
       </footer>
 

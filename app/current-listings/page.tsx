@@ -1,3 +1,4 @@
+// app/current-listings/page.tsx
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -30,8 +31,9 @@ export default function CurrentListingsPage() {
       try {
         setLoading(true);
 
+        // 👇 Include BOTH live + sold so Buy-Now lots stay on the page
         const liveRes = await databases.listDocuments(DB_ID, COLLECTION_ID, [
-          Query.equal("status", "live"),
+          Query.equal("status", ["live", "sold"]),
         ]);
 
         const soonRes = await databases.listDocuments(DB_ID, COLLECTION_ID, [
@@ -40,6 +42,10 @@ export default function CurrentListingsPage() {
 
         setLive(liveRes.documents);
         setSoon(soonRes.documents);
+      } catch (err) {
+        console.error("Failed to load current listings:", err);
+        setLive([]);
+        setSoon([]);
       } finally {
         setLoading(false);
       }
@@ -98,14 +104,12 @@ export default function CurrentListingsPage() {
   // ------------------------------------------------------------
   return (
     <main className="min-h-screen bg-[#F5F5F5] text-gray-900">
-
       {/* DVLA HEADER BAR */}
       <div className="w-full bg-yellow-300 border-b-4 border-black py-4 text-center">
         <h2 className="text-xl font-extrabold text-black tracking-wide uppercase"></h2>
       </div>
 
       <div className="px-6 py-12">
-        
         {/* PAGE TITLE */}
         <h1 className="text-center text-4xl font-extrabold text-black mb-10 tracking-tight">
           Current Listings
@@ -138,7 +142,6 @@ export default function CurrentListingsPage() {
 
         {/* FILTER BAR */}
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 bg-white border border-gray-300 p-4 rounded-xl shadow-sm mb-10">
-          
           <input
             type="text"
             placeholder="Search registration…"
@@ -163,7 +166,9 @@ export default function CurrentListingsPage() {
         {/* GRID */}
         <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {loading && (
-            <p className="col-span-full text-center text-gray-500">Loading…</p>
+            <p className="col-span-full text-center text-gray-500">
+              Loading…
+            </p>
           )}
 
           {!loading &&
@@ -180,7 +185,6 @@ export default function CurrentListingsPage() {
               </p>
             )}
         </div>
-
       </div>
     </main>
   );

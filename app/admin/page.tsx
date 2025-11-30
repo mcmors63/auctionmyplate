@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Client, Account, Databases, Query } from "appwrite";
 import { useRouter } from "next/navigation";
 import AdminAuctionTimer from "../components/ui/AdminAuctionTimer";
+import Link from "next/link";
 
 // ------------------------------------------------------
 // APPWRITE SETUP
@@ -364,17 +365,32 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-yellow-50 py-10 px-6">
       <div className="max-w-5xl mx-auto bg-white rounded-2xl p-8 shadow-lg">
-        <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-6">
+        {/* Left: title + DVLA guide link */}
+        <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-bold text-yellow-700">
             Admin Dashboard
           </h1>
-          <button
-            className="text-red-600 font-semibold"
-            onClick={logout}
+
+          <Link
+            href="/admin/dvla-transfer-guide"
+            className="inline-flex items-center text-xs font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
           >
-            Logout
-          </button>
+            DVLA Transfer Guide
+            <span aria-hidden="true" className="ml-1">
+              →
+            </span>
+          </Link>
         </div>
+
+        {/* Right: logout */}
+        <button
+          className="text-red-600 font-semibold"
+          onClick={logout}
+        >
+          Logout
+        </button>
+      </div>
 
         {/* TABS */}
         <div className="flex flex-wrap gap-6 border-b pb-3">
@@ -816,7 +832,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* REVIEW MODAL */}
+               {/* REVIEW MODAL */}
         {selectedPlate && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-2xl w-full max-w-lg relative">
@@ -831,17 +847,25 @@ export default function AdminPage() {
                 {selectedPlate.registration}
               </h2>
 
-              <p>
-                <strong>Plate Type:</strong>{" "}
-                {selectedPlate.plate_type}
+              <p className="text-sm mb-2">
+                <strong>Plate Type:</strong> {selectedPlate.plate_type}
               </p>
 
-              <label className="block mt-3 font-semibold">
+              {/* USER DESCRIPTION (read-only – what seller entered) */}
+              <label className="block mt-2 font-semibold text-sm">
+                Seller description (read-only)
+              </label>
+              <div className="border rounded-md p-2 text-sm bg-gray-50 whitespace-pre-line max-h-32 overflow-y-auto">
+                {selectedPlate.description || "No description provided by seller."}
+              </div>
+
+              {/* RESERVE */}
+              <label className="block mt-3 font-semibold text-sm">
                 Reserve Price (£)
               </label>
               <input
                 type="number"
-                className="border w-full p-2 rounded-md"
+                className="border w-full p-2 rounded-md text-sm"
                 value={selectedPlate.reserve_price}
                 onChange={(e) =>
                   setSelectedPlate({
@@ -851,12 +875,13 @@ export default function AdminPage() {
                 }
               />
 
-              <label className="block mt-3 font-semibold">
+              {/* STARTING PRICE */}
+              <label className="block mt-3 font-semibold text-sm">
                 Starting Price (£)
               </label>
               <input
                 type="number"
-                className="border w-full p-2 rounded-md"
+                className="border w-full p-2 rounded-md text-sm"
                 value={selectedPlate.starting_price || 0}
                 onChange={(e) =>
                   setSelectedPlate({
@@ -866,12 +891,13 @@ export default function AdminPage() {
                 }
               />
 
-              <label className="block mt-4 font-semibold">
-                Interesting Fact
+              {/* HISTORY / INTERESTING FACT – THIS IS WHAT SHOWS ON THE LISTING PAGE */}
+              <label className="block mt-4 font-semibold text-sm">
+                Plate history &amp; interesting facts
               </label>
               <textarea
-                className="border w-full p-2 rounded-md"
-                rows={3}
+                className="border w-full p-2 rounded-md text-sm"
+                rows={4}
                 value={selectedPlate.interesting_fact || ""}
                 onChange={(e) =>
                   setSelectedPlate({
@@ -889,16 +915,16 @@ export default function AdminPage() {
                   Approve
                 </button>
 
-                <button
-                  onClick={() => rejectPlate(selectedPlate)}
-                  className="bg-red-600 text-white py-2 px-4 rounded-md font-semibold"
-                >
-                  Reject
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+                         <button
+            onClick={() => rejectPlate(selectedPlate)}
+            className="bg-red-600 text-white py-2 px-4 rounded-md font-semibold"
+          >
+            Reject
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
       </div>
     </div>
   );

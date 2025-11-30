@@ -106,11 +106,9 @@ export async function POST(req: Request) {
     // -----------------------------
     // Safety check & SOFT CLOSE
     // -----------------------------
-    const nowMs = Date.now();
-    const auctionEnd =
-      listing.auction_end ??
-      listing.end_time ??
-      null;
+    const now = new Date();
+    const nowMs = now.getTime();
+    const auctionEnd = listing.auction_end ?? listing.end_time ?? null;
 
     let newAuctionEnd: string | null = null;
 
@@ -172,9 +170,9 @@ export async function POST(req: Request) {
         {
           listing_id: listing.$id,
           amount: bidAmount,
-          timestamp: new Date().toISOString(),
+          timestamp: now.toISOString(),
           bidder_email: userEmail,
-          // ❌ no bidder_id – avoids schema mismatch
+          // no bidder_id here – keep schema loose for the bids collection
         }
       );
     } catch (err) {
@@ -183,15 +181,26 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------
-    // Update listing current_bid + bids count (+ soft-close extension)
+    // Update listing:
+    //  - current_bid
+    //  - bids count
+    //  - SOFT CLOSE extension
+    //  - bidder info (highest_bidder / bidder_email / bidder_id / last_bid_time)
     // -----------------------------
     const newBidsCount =
       typeof listing.bids === "number" ? listing.bids + 1 : 1;
 
-    const updatePayload: any = {
+    const updatePayload: Record<string, any> = {
       current_bid: bidAmount,
       bids: newBidsCount,
+      highest_bidder: userEmail, // you can change this to a masked value later
+      bidder_email: userEmail,
+      last_bid_time: now.toISOString(),
     };
+
+    if (userId && typeof userId === "string") {
+      updatePayload.bidder_id = userId;
+    }
 
     if (newAuctionEnd) {
       updatePayload.auction_end = newAuctionEnd;

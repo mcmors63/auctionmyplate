@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import AuctionTimer from "./AuctionTimer"; // ✅ use public timer, not AdminAuctionTimer
+import AuctionTimer from "./AuctionTimer"; // ✅ public timer, not AdminAuctionTimer
 
 type Listing = {
   $id: string;
@@ -17,6 +17,10 @@ type Listing = {
   buy_now?: number | null;
   auction_start?: string | null;
   auction_end?: string | null;
+
+  // extra sale fields we may use
+  sold_price?: number | null;
+  sale_status?: string | null;
 };
 
 type Props = {
@@ -36,16 +40,31 @@ export default function ListingCard({ listing }: Props) {
     buy_now,
     auction_start,
     auction_end,
+    sold_price,
+    sale_status,
   } = listing;
 
   // -----------------------------
   // Status flags
   // -----------------------------
   const lowerStatus = (status || "").toLowerCase();
+  const saleStatusLower = (sale_status || "").toLowerCase();
+
   const isLive = lowerStatus === "live";
   const isQueued = lowerStatus === "queued";
 
-  const timerLabel = isLive ? "AUCTION ENDS IN" : "AUCTION STARTS IN";
+  // 🔴 SOLD: either the main status is "sold", or sale_status is "sold",
+  // or we have a non-zero sold_price recorded.
+  const isSold =
+    lowerStatus === "sold" ||
+    saleStatusLower === "sold" ||
+    (typeof sold_price === "number" && sold_price > 0);
+
+  const timerLabel = isSold
+    ? "SOLD"
+    : isLive
+    ? "AUCTION ENDS IN"
+    : "AUCTION STARTS IN";
 
   // -----------------------------
   // "NEW" badge logic
@@ -72,8 +91,11 @@ export default function ListingCard({ listing }: Props) {
   // -----------------------------
   // Buy Now display logic
   // -----------------------------
+  // 🔒 Once sold, we NEVER show Buy Now price
   const hasBuyNow =
-    isLive && typeof buy_now === "number" && buy_now > 0;
+    isLive && !isSold && typeof buy_now === "number" && buy_now > 0;
+
+  const canBid = isLive && !isSold;
 
   return (
     <div className="bg-white text-gray-900 border border-gold/40 rounded-xl shadow-md p-4 flex flex-col gap-3 transition hover:shadow-lg w-full">
@@ -97,13 +119,19 @@ export default function ListingCard({ listing }: Props) {
 
         {/* BADGES */}
         <div className="flex flex-row xs:flex-col items-end gap-1 xs:ml-2">
-          {isLive && (
+          {isSold && (
+            <span className="px-2 py-0.5 text-[9px] font-bold bg-red-600 text-white rounded-full">
+              SOLD
+            </span>
+          )}
+
+          {!isSold && isLive && (
             <span className="px-2 py-0.5 text-[9px] font-bold bg-gold text-black rounded-full">
               LIVE
             </span>
           )}
 
-          {isQueued && (
+          {!isSold && isQueued && (
             <span className="px-2 py-0.5 text-[9px] font-bold bg-gray-200 text-gray-700 rounded-full">
               COMING
             </span>
@@ -162,7 +190,11 @@ export default function ListingCard({ listing }: Props) {
         <div className="w-full">
           <p className="text-[9px] text-gray-500 mb-0.5">{timerLabel}</p>
           <div className="px-3 py-1.5 bg-white border border-gold rounded-lg shadow-sm inline-block min-w-[180px]">
-            {(isLive || isQueued) && (
+            {isSold ? (
+              <span className="text-[10px] font-semibold text-red-700">
+                Sold – bidding closed
+              </span>
+            ) : (isLive || isQueued) ? (
               <AuctionTimer
                 mode={isLive ? "live" : "coming"}
                 // queued = countdown to auction_start, live = countdown to auction_end
@@ -172,8 +204,7 @@ export default function ListingCard({ listing }: Props) {
                     : auction_start ?? undefined
                 }
               />
-            )}
-            {!isLive && !isQueued && (
+            ) : (
               <span className="text-[10px]">No active auction</span>
             )}
           </div>
@@ -184,11 +215,16 @@ export default function ListingCard({ listing }: Props) {
           {/* Bid + reserve + buy now */}
           <div className="text-left xs:text-right flex-1">
             <p className="text-[9px] text-gold">Bid</p>
-            <p className="font-bold text-gold text-sm">
-              £{numericCurrentBid.toLocaleString()}
-            </p>
+            {isSold ? (
+              // 🔒 NEVER show the sold price
+              <p className="font-bold text-gray-600 text-sm">Sold</p>
+            ) : (
+              <p className="font-bold text-gold text-sm">
+                £{numericCurrentBid.toLocaleString()}
+              </p>
+            )}
 
-            {reserveMet && (
+            {reserveMet && !isSold && (
               <p className="text-[9px] text-green-700 font-semibold mt-1">
                 Reserve Met
               </p>
@@ -222,7 +258,7 @@ export default function ListingCard({ listing }: Props) {
           View
         </Link>
 
-        {isLive ? (
+        {canBid ? (
           <Link
             href={`/place_bid?id=${$id}`}
             className="bg-gold text-black px-3 py-1.5 rounded-md font-bold text-[12px] shadow-sm hover:bg-yellow-400 transition"

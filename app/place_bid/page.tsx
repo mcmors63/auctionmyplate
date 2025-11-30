@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Client, Databases, Account } from "appwrite";
 import Link from "next/link";
 import AdminAuctionTimer from "@/components/ui/AdminAuctionTimer";
@@ -24,7 +24,8 @@ const db = new Databases(client);
 const account = new Account(client);
 
 const PLATES_DB = process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!;
-const PLATES_COLLECTION = process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!;
+const PLATES_COLLECTION =
+  process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!;
 
 // ----------------------------------------------------
 // TYPES
@@ -68,7 +69,6 @@ function getBidIncrement(current: number): number {
 // ----------------------------------------------------
 export default function PlaceBidPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const listingId = searchParams.get("id");
 
   const [listing, setListing] = useState<Listing | null>(null);
@@ -84,7 +84,9 @@ export default function PlaceBidPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   // Stripe payment method state
-  const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(null);
+  const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(
+    null
+  );
   const [checkingPaymentMethod, setCheckingPaymentMethod] = useState(false);
   const [paymentMethodError, setPaymentMethodError] = useState<string | null>(
     null
@@ -95,7 +97,6 @@ export default function PlaceBidPage() {
   // ----------------------------------------------------
   useEffect(() => {
     const checkLogin = async () => {
-      // 1) LocalStorage – same as navbar
       if (typeof window !== "undefined") {
         const storedEmail = window.localStorage.getItem("amp_user_email");
         const storedId = window.localStorage.getItem("amp_user_id");
@@ -107,7 +108,6 @@ export default function PlaceBidPage() {
         }
       }
 
-      // 2) Fallback: real Appwrite session
       try {
         const current = await account.get();
         setLoggedIn(true);
@@ -158,14 +158,8 @@ export default function PlaceBidPage() {
         setHasPaymentMethod(Boolean(data.hasPaymentMethod));
       } catch (err: any) {
         console.error("has-payment-method error:", err);
+        const msg = err?.message || "Could not verify your payment method.";
 
-        const msg =
-          err?.message || "Could not verify your payment method.";
-
-        // IMPORTANT:
-        // If the backend is just telling us that Stripe isn't configured,
-        // don't scare the user with a big red banner. Treat it as
-        // "no payment info" and carry on – bidding is still allowed.
         if (msg.includes("Stripe is not configured on the server")) {
           setPaymentMethodError(null);
           setHasPaymentMethod(null);
@@ -239,6 +233,7 @@ export default function PlaceBidPage() {
 
   const isLive = listing.status === "live";
   const isComing = listing.status === "queued";
+  const isSold = listing.status === "sold";
 
   const displayId =
     listing.listing_id || `AMP-${listing.$id.slice(-6).toUpperCase()}`;
@@ -247,12 +242,14 @@ export default function PlaceBidPage() {
   const auctionStart = listing.auction_start ?? listing.start_time ?? null;
   const auctionEnd = listing.auction_end ?? listing.end_time ?? null;
 
-  // ---- detect if the auction has actually ended based on time ----
   const auctionEndMs = auctionEnd ? Date.parse(auctionEnd) : null;
-  const auctionEnded =
+  const auctionEndedTime =
     auctionEndMs !== null && Number.isFinite(auctionEndMs)
       ? auctionEndMs <= Date.now()
       : false;
+
+  // Treat SOLD as ended as well
+  const auctionEnded = auctionEndedTime || isSold;
 
   // Only allow bidding / buy now when status is live AND end time is in future
   const canBidOrBuyNow = isLive && !auctionEnded;
@@ -382,10 +379,10 @@ export default function PlaceBidPage() {
     try {
       setSubmitting(true);
 
-      // 1) Charge card via Stripe (off-session, saved payment method)
-      const totalWithDvla = buyNowPrice + DVLA_FEE_GBP; // GBP
+      const totalWithDvla = buyNowPrice + DVLA_FEE_GBP;
       const amountInPence = Math.round(totalWithDvla * 100);
 
+      // 1) Charge via Stripe off-session
       const stripeRes = await fetch("/api/stripe/charge-off-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -417,7 +414,7 @@ export default function PlaceBidPage() {
       const paymentIntentId: string | undefined =
         stripeData.paymentIntentId || stripeData.paymentIntentID;
 
-      // 2) Tell backend to mark the plate as sold & create transaction
+      // 2) Mark listing as sold / create transaction
       const res = await fetch("/api/buy-now", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -473,16 +470,13 @@ export default function PlaceBidPage() {
       {/* DVLA-STYLE PLATE HERO */}
       <div className="max-w-4xl mx-auto mb-6">
         <div className="relative overflow-hidden rounded-2xl border border-black/40 shadow-xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-7 sm:px-10 sm:py-8 flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
-          {/* Soft glows */}
           <div className="pointer-events-none absolute -top-10 -left-10 h-32 w-32 rounded-full bg-yellow-300/20 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-yellow-500/20 blur-3xl" />
 
-          {/* DVLA-style plate ONLY */}
           <div className="relative z-10 flex-1 flex flex-col items-center">
             <DvlaPlate registration={listing.registration} />
           </div>
 
-          {/* Right-hand summary */}
           <div className="relative z-10 hidden sm:flex flex-col items-end text-right text-gray-200 text-xs gap-2">
             <div>
               <p className="uppercase tracking-[0.18em] text-[10px] text-gray-400">
@@ -507,17 +501,25 @@ export default function PlaceBidPage() {
       <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
         {/* Status pills */}
         <div className="flex justify-end gap-2">
-          {canBidOrBuyNow && (
+          {isSold && (
+            <span className="px-4 py-1 bg-green-600 text-white rounded-full font-bold text-sm">
+              SOLD
+            </span>
+          )}
+
+          {!isSold && canBidOrBuyNow && (
             <span className="px-4 py-1 bg-[#FFD500] border border-black rounded-full font-bold text-sm">
               LIVE
             </span>
           )}
-          {isComing && !auctionEnded && (
+
+          {!isSold && isComing && !auctionEnded && (
             <span className="px-4 py-1 bg-gray-200 text-gray-700 rounded-full font-bold text-sm">
               Queued
             </span>
           )}
-          {auctionEnded && (
+
+          {!isSold && auctionEnded && (
             <span className="px-4 py-1 bg-gray-300 text-gray-800 rounded-full font-bold text-sm">
               ENDED
             </span>
@@ -532,7 +534,9 @@ export default function PlaceBidPage() {
           <h2 className="text-4xl font-extrabold text-green-700 mt-4">
             £{effectiveBaseBid.toLocaleString()}
           </h2>
-          <p className="text-gray-700">Current Bid</p>
+          <p className="text-gray-700">
+            {isSold ? "Final Price" : "Current Bid"}
+          </p>
 
           <p className="mt-4 font-semibold text-lg">
             {bidsCount} {bidsCount === 1 ? "Bid" : "Bids"}
@@ -552,7 +556,7 @@ export default function PlaceBidPage() {
         {/* TIMER SECTION */}
         <div>
           <p className="text-xs text-gray-500 uppercase">{timerLabel}</p>
-          <div className="inline-block mt-1 px-3 py-2 bg-white border border-black rounded-lg shadow-sm font-semibold text-black">
+          <div className="inline-block mt-1 px-3 py-2 bg:white border border-black rounded-lg shadow-sm font-semibold text-black">
             <AdminAuctionTimer
               start={auctionStart}
               end={auctionEnd}
@@ -606,9 +610,7 @@ export default function PlaceBidPage() {
           )}
 
           {!loggedIn ? (
-            // -----------------------------
-            // LOGGED OUT STATE
-            // -----------------------------
+            // LOGGED OUT
             <div className="mt-4 border border-yellow-400 bg-[#FFFBE6] rounded-lg p-4 space-y-3">
               <p className="font-semibold text-yellow-800">Log in to bid</p>
               <p className="text-sm text-yellow-900">
@@ -631,12 +633,12 @@ export default function PlaceBidPage() {
               </div>
             </div>
           ) : auctionEnded ? (
-            // -----------------------------
-            // AUCTION ENDED MESSAGE
-            // -----------------------------
+            // AUCTION ENDED / SOLD
             <div className="mt-4 border border-red-300 bg-red-50 rounded-lg p-4 space-y-2">
               <p className="font-semibold text-red-800">
-                Auction has already ended.
+                {isSold
+                  ? "This plate has been sold."
+                  : "Auction has already ended."}
               </p>
               <p className="text-sm text-red-900">
                 No further bids or Buy Now purchases can be made on this
@@ -644,9 +646,7 @@ export default function PlaceBidPage() {
               </p>
             </div>
           ) : (
-            // -----------------------------
-            // LOGGED IN STATE (auction live/upcoming)
-            // -----------------------------
+            // LOGGED IN, AUCTION LIVE/UPCOMING
             <>
               {error && (
                 <p className="bg-red-50 text-red-700 border border-red-200 p-3 rounded">
@@ -683,7 +683,7 @@ export default function PlaceBidPage() {
                     paymentBlocked ||
                     checkingPaymentMethod
                   }
-                  className={`flex-1 rounded-lg py-3 text-lg font-semibold text-white ${
+                  className={`flex-1 rounded-lg py-3 text-lg font-semibold text:white ${
                     canBidOrBuyNow &&
                     !paymentBlocked &&
                     !checkingPaymentMethod
@@ -732,7 +732,6 @@ export default function PlaceBidPage() {
                 )}
               </div>
 
-              {/* Link to manage payment method even when allowed */}
               {loggedIn && (
                 <div className="mt-3">
                   <Link

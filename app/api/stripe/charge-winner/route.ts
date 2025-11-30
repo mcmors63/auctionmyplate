@@ -14,8 +14,9 @@ if (!STRIPE_SECRET_KEY) {
 }
 
 const stripe = new Stripe(STRIPE_SECRET_KEY, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-11-17.clover",
 });
+
 
 // £80 DVLA fee (in pence)
 const DVLA_FEE_PENCE = 80_00; // 8000

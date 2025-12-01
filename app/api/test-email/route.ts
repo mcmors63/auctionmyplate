@@ -1,67 +1,115 @@
-// app/api/test-email/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 
 export const runtime = "nodejs";
 
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || "587");
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const FROM_EMAIL = process.env.FROM_EMAIL;
-const TEST_EMAIL_TO = process.env.TEST_EMAIL_TO;
+// Read env safely (don’t log secrets)
+const smtpHost = process.env.SMTP_HOST || "";
+const smtpPort = Number(process.env.SMTP_PORT || "465");
+const smtpUser = process.env.SMTP_USER || "";
+const smtpPass = process.env.SMTP_PASS || "";
+const defaultTo =
+  process.env.ADMIN_EMAIL || "admin@auctionmyplate.co.uk";
 
 function getTransporter() {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !FROM_EMAIL) {
-    console.error("❌ Missing email env vars in /api/test-email", {
-      SMTP_HOST: !!SMTP_HOST,
-      SMTP_USER: !!SMTP_USER,
-      SMTP_PASS: !!SMTP_PASS,
-      FROM_EMAIL: !!FROM_EMAIL,
-    });
-    return null;
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.warn(
+      "[test-email] SMTP not fully configured. Emails will be skipped."
+    );
   }
 
   return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
     auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
+      user: smtpUser,
+      pass: smtpPass,
     },
   });
 }
 
-export async function GET() {
+// Safe wrapper so we never call sendMail with an empty "to"
+async function safeSendMail(
+  transporter: nodemailer.Transporter,
+  opts: nodemailer.SendMailOptions
+) {
+  const rawTo = opts.to;
+  let recipients: string[] = [];
+
+  if (typeof rawTo === "string") {
+    recipients = rawTo
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  } else if (Array.isArray(rawTo)) {
+    recipients = rawTo.map(String).map((s) => s.trim()).filter(Boolean);
+  }
+
+  if (!recipients.length) {
+    console.warn("[test-email] No valid recipients, skipping email.");
+    return { ok: false, error: "No valid recipients" };
+  }
+
+  const finalTo = recipients.join(", ");
+  console.log("[test-email] Sending email to:", finalTo);
+
+  await transporter.sendMail({ ...opts, to: finalTo });
+
+  return { ok: true, sentTo: finalTo };
+}
+
+export async function GET(req: NextRequest) {
   try {
-    const transporter = getTransporter();
-    if (!transporter) {
+    // Allow ?to=you@example.com override
+    const url = new URL(req.url);
+    const toParam = url.searchParams.get("to") || undefined;
+    const to = (toParam || defaultTo).trim();
+
+    const envSummary = {
+      hasSMTP_HOST: Boolean(smtpHost),
+      hasSMTP_USER: Boolean(smtpUser),
+      hasSMTP_PASS: Boolean(smtpPass),
+      smtpPort,
+      defaultTo: to,
+      vercelEnv: process.env.VERCEL_ENV || null,
+      nodeEnv: process.env.NODE_ENV || null,
+    };
+
+    console.log("[test-email] ENV SUMMARY:", envSummary);
+
+    // If SMTP not configured, bail early
+    if (!smtpHost || !smtpUser || !smtpPass) {
       return NextResponse.json(
-        { error: "Email transport not configured" },
+        {
+          ok: false,
+          error: "SMTP not fully configured on server.",
+          envSummary,
+        },
         { status: 500 }
       );
     }
 
-    if (!TEST_EMAIL_TO) {
-      return NextResponse.json(
-        { error: "TEST_EMAIL_TO not set" },
-        { status: 400 }
-      );
-    }
+    const transporter = getTransporter();
 
-    await transporter.sendMail({
-      from: FROM_EMAIL,
-      to: TEST_EMAIL_TO,
-      subject: "AuctionMyPlate test email",
-      text: "If you’re reading this, SMTP is working from your Next.js app.",
+    const result = await safeSendMail(transporter, {
+      from: `"AuctionMyPlate TEST" <${smtpUser}>`,
+      to,
+      subject: "AuctionMyPlate test email (Vercel)",
+      text: "If you can read this, SMTP works on your Vercel deployment.",
     });
 
-    return NextResponse.json({ ok: true, sentTo: TEST_EMAIL_TO });
-  } catch (err) {
-    console.error("❌ /api/test-email failed:", err);
+    return NextResponse.json({
+      ...result,
+      envSummary,
+    });
+  } catch (err: any) {
+    console.error("[test-email] error:", err);
     return NextResponse.json(
-      { error: "Failed to send test email" },
+      {
+        ok: false,
+        error: err?.message || "Unknown test-email error",
+      },
       { status: 500 }
     );
   }

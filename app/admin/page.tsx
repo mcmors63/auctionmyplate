@@ -6,6 +6,7 @@ import { Client, Account, Databases, Query } from "appwrite";
 import { useRouter } from "next/navigation";
 import AdminAuctionTimer from "../components/ui/AdminAuctionTimer";
 import Link from "next/link";
+import { getAuctionWindow } from "@/lib/getAuctionWindow";
 
 // ------------------------------------------------------
 // APPWRITE SETUP
@@ -120,57 +121,77 @@ export default function AdminPage() {
   }, [authorized, activeTab]);
 
   // ------------------------------------------------------
-  // APPROVE LISTING (starting_price included)
+// APPROVE LISTING (starting_price included)
 // ------------------------------------------------------
-  const approvePlate = async () => {
-    if (!selectedPlate) return;
+const approvePlate = async () => {
+  if (!selectedPlate) return;
 
+  try {
+    // 1) Call the existing API to do all the current logic
+    const res = await fetch("/api/approve-listing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        listingId: selectedPlate.$id,
+        sellerEmail: selectedPlate.seller_email,
+        interesting_fact: selectedPlate.interesting_fact || "",
+        starting_price: Number(selectedPlate.starting_price) || 0,
+        reserve_price: Number(selectedPlate.reserve_price) || 0,
+      }),
+    });
+
+    let data: any = null;
     try {
-      const res = await fetch("/api/approve-listing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          listingId: selectedPlate.$id,
-          sellerEmail: selectedPlate.seller_email,
-          interesting_fact: selectedPlate.interesting_fact || "",
-          starting_price: Number(selectedPlate.starting_price) || 0,
-          reserve_price: Number(selectedPlate.reserve_price) || 0,
-        }),
-      });
-
-      let data: any = null;
-      try {
-        data = await res.json();
-      } catch (e) {
-        console.error("approve-listing: failed to parse JSON", e);
-      }
-
-      if (!res.ok || data?.error) {
-        console.error("approve-listing error:", {
-          status: res.status,
-          statusText: res.statusText,
-          data,
-        });
-        throw new Error(data?.error || "Failed to approve plate.");
-      }
-
-      setMessage(
-        `Plate ${selectedPlate.registration} approved & scheduled`
-      );
-      setSelectedPlate(null);
-
-      const updated = await databases.listDocuments(
-        DB_ID,
-        PLATES_COLLECTION_ID,
-        [Query.equal("status", activeTab)]
-      );
-
-      setPlates(updated.documents);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to approve plate.");
+      data = await res.json();
+    } catch (e) {
+      console.error("approve-listing: failed to parse JSON", e);
     }
-  };
+
+    if (!res.ok || data?.error) {
+      console.error("approve-listing error:", {
+        status: res.status,
+        statusText: res.statusText,
+        data,
+      });
+      throw new Error(data?.error || "Failed to approve plate.");
+    }
+
+    // 2) Work out the next auction window and write it to this plate
+    //    This uses lib/getAuctionWindow.ts
+    const windowInfo = getAuctionWindow();
+
+    // We want the *next* auction week: Monday 01:00 → Sunday 23:00
+    const auctionStartIso = windowInfo.nextStart.toISOString();
+    const auctionEndIso = windowInfo.nextEnd.toISOString();
+
+    await databases.updateDocument(
+      DB_ID,
+      PLATES_COLLECTION_ID,
+      selectedPlate.$id,
+      {
+        auction_start: auctionStartIso,
+        auction_end: auctionEndIso,
+      }
+    );
+
+    // 3) UI feedback + refresh
+    setMessage(
+      `Plate ${selectedPlate.registration} approved & scheduled`
+    );
+    setSelectedPlate(null);
+
+    const updated = await databases.listDocuments(
+      DB_ID,
+      PLATES_COLLECTION_ID,
+      [Query.equal("status", activeTab)]
+    );
+
+    setPlates(updated.documents);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to approve plate.");
+  }
+};
 
   // ------------------------------------------------------
   // REJECT LISTING (server API, defensive JSON handling)

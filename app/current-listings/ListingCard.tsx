@@ -13,10 +13,13 @@ type Listing = {
   listing_id?: string;
   registration?: string;
   status?: string;
-  current_bid?: number | null;
+
+  // These often end up as strings from Appwrite, so allow both
+  current_bid?: number | string | null;
   bids?: number | null;
   reserve_price?: number | null;
-  buy_now?: number | null;
+  buy_now?: number | string | null;
+
   auction_start?: string | null;
   auction_end?: string | null;
 
@@ -86,16 +89,53 @@ export default function ListingCard({ listing }: Props) {
   const isNew = ageMs !== null && ageMs < 86400000;
 
   // -----------------------------
-  // Reserve / bids / buy now
+  // Reserve / bids / BUY NOW LOGIC
   // -----------------------------
-  const numericCurrentBid = current_bid ?? 0;
+
+  // Force everything to numbers safely
+  const numericCurrentBidRaw =
+    typeof current_bid === "number"
+      ? current_bid
+      : current_bid != null
+      ? Number(current_bid)
+      : 0;
+
+  const numericCurrentBid = Number.isFinite(numericCurrentBidRaw)
+    ? numericCurrentBidRaw
+    : 0;
+
+  const numericBuyNowRaw =
+    typeof buy_now === "number"
+      ? buy_now
+      : buy_now != null
+      ? Number(buy_now)
+      : null;
+
+  const numericBuyNow =
+    numericBuyNowRaw !== null && Number.isFinite(numericBuyNowRaw)
+      ? numericBuyNowRaw
+      : null;
+
   const hasReserve =
     typeof reserve_price === "number" && reserve_price > 0;
+
   const reserveMet =
     hasReserve && numericCurrentBid >= (reserve_price as number);
 
+  // 🔴 RULE:
+  // Buy Now must disappear once bidding reaches OR beats the Buy Now amount.
+  //
+  // So we ONLY show Buy Now text while:
+  // - auction is live
+  // - not sold
+  // - buy now is a valid positive number
+  // - AND current bid is STRICTLY LOWER than buy now
   const hasBuyNow =
-    isLive && !isSold && typeof buy_now === "number" && buy_now > 0;
+    isLive &&
+    !isSold &&
+    numericBuyNow !== null &&
+    numericBuyNow > 0 &&
+    numericCurrentBid < numericBuyNow;
 
   const canBid = isLive && !isSold;
 
@@ -133,7 +173,7 @@ export default function ListingCard({ listing }: Props) {
 
           {!isSold && isQueued && (
             <span className="px-2 py-0.5 text-[9px] font-bold bg-gray-200 text-gray-700 rounded-full">
-              COMING
+              COMING SOON
             </span>
           )}
 
@@ -223,9 +263,10 @@ export default function ListingCard({ listing }: Props) {
               </p>
             )}
 
-            {hasBuyNow && (
+            {/* 👇 This will ONLY render while current bid < buy now */}
+            {hasBuyNow && numericBuyNow !== null && (
               <p className="text-[9px] text-emerald-700 font-semibold mt-1">
-                Buy Now: £{buy_now!.toLocaleString()}
+                Buy Now: £{numericBuyNow.toLocaleString()}
               </p>
             )}
 

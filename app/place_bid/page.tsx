@@ -254,6 +254,12 @@ export default function PlaceBidPage() {
   // Only allow bidding / buy now when status is live AND end time is in future
   const canBidOrBuyNow = isLive && !auctionEnded;
 
+  // ✅ Buy Now should ONLY show while current price is below Buy Now
+  const canShowBuyNow =
+    buyNowPrice !== null &&
+    canBidOrBuyNow &&
+    effectiveBaseBid < buyNowPrice;
+
   // Timer label + status
   let timerLabel: string;
   if (auctionEnded) {
@@ -357,8 +363,8 @@ export default function PlaceBidPage() {
       return;
     }
 
-    if (!canBidOrBuyNow) {
-      setError("Auction has already ended.");
+    if (!canBidOrBuyNow || !canShowBuyNow) {
+      setError("Buy Now is no longer available on this listing.");
       return;
     }
 
@@ -546,9 +552,9 @@ export default function PlaceBidPage() {
             <p className="mt-2 font-bold text-green-700">Reserve Met</p>
           )}
 
-          {buyNowPrice && canBidOrBuyNow && (
+          {canShowBuyNow && (
             <p className="mt-2 text-sm font-semibold text-blue-700">
-              Buy Now available: £{buyNowPrice.toLocaleString()}
+              Buy Now available: £{buyNowPrice!.toLocaleString()}
             </p>
           )}
         </div>
@@ -702,7 +708,7 @@ export default function PlaceBidPage() {
                     : "Auction Not Live"}
                 </button>
 
-                {buyNowPrice && (
+                {canShowBuyNow && (
                   <button
                     onClick={handleBuyNow}
                     disabled={
@@ -726,7 +732,7 @@ export default function PlaceBidPage() {
                         ? "Add Payment Method"
                         : checkingPaymentMethod
                         ? "Checking Payment…"
-                        : `Buy Now £${buyNowPrice.toLocaleString()}`
+                        : `Buy Now £${buyNowPrice!.toLocaleString()}`
                       : "Buy Now Unavailable"}
                   </button>
                 )}

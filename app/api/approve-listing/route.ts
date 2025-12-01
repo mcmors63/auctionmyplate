@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Client, Databases } from "node-appwrite";
 import nodemailer from "nodemailer";
+import { getAuctionWindow } from "@/lib/getAuctionWindow";
 
 export const runtime = "nodejs";
 
@@ -107,7 +108,20 @@ export async function POST(req: NextRequest) {
         ? interestingFactRaw.trim()
         : (plate.interesting_fact as string | undefined) || "";
 
-    // 🔑 Approve & queue for next auction
+    // -----------------------------
+    // Calculate NEXT auction window
+    // -----------------------------
+    const windowInfo = getAuctionWindow();
+    const auction_start = windowInfo.nextStart.toISOString();
+    const auction_end = windowInfo.nextEnd.toISOString();
+
+    console.log("APPROVE-LISTING auction window", {
+      listingId,
+      auction_start,
+      auction_end,
+    });
+
+    // 🔑 Approve & queue for next auction, including start/end
     const updated = await databases.updateDocument(
       PLATES_DB_ID,
       PLATES_COLLECTION_ID,
@@ -117,6 +131,8 @@ export async function POST(req: NextRequest) {
         starting_price: startingPrice,
         reserve_price: reservePrice,
         interesting_fact: interestingFact,
+        auction_start,
+        auction_end,
       }
     );
 

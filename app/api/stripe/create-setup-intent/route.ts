@@ -1,137 +1,108 @@
 // app/api/stripe/create-setup-intent/route.ts
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { Client as AppwriteClient, Databases, Query } from "node-appwrite";
 
 export const runtime = "nodejs";
 
 // -----------------------------
-// ENV
+// ENV / STRIPE SETUP
 // -----------------------------
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
 if (!stripeSecretKey) {
   console.warn(
     "[create-setup-intent] STRIPE_SECRET_KEY is not set. This route will fail."
   );
 }
 
-const stripe = new Stripe(stripeSecretKey || "", {
-  apiVersion: "2025-11-17.clover",
-});
-
-
-const appwriteEndpoint =
-  process.env.APPWRITE_ENDPOINT ||
-  process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ||
-  "";
-const appwriteProject =
-  process.env.APPWRITE_PROJECT_ID ||
-  process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID ||
-  "";
-const appwriteApiKey = process.env.APPWRITE_API_KEY || "";
-
-const PROFILES_DB_ID =
-  process.env.APPWRITE_PROFILES_DATABASE_ID ||
-  process.env.NEXT_PUBLIC_APPWRITE_PROFILES_DATABASE_ID!;
-const PROFILES_COLLECTION_ID =
-  process.env.APPWRITE_PROFILES_COLLECTION_ID ||
-  process.env.NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID!;
-
-function getAppwrite() {
-  if (!appwriteEndpoint || !appwriteProject || !appwriteApiKey) {
-    throw new Error(
-      "Appwrite env vars missing (APPWRITE_ENDPOINT / PROJECT_ID / API_KEY)."
-    );
-  }
-
-  const client = new AppwriteClient()
-    .setEndpoint(appwriteEndpoint)
-    .setProject(appwriteProject)
-    .setKey(appwriteApiKey);
-
-  const databases = new Databases(client);
-  return { databases };
-}
+// Use default API version to avoid TS literal issues
+const stripe = stripeSecretKey
+  ? new Stripe(stripeSecretKey, {
+      apiVersion: undefined as any,
+    })
+  : null;
 
 // -----------------------------
-// POST
+// POST /api/stripe/create-setup-intent
+// Body (from client):
+//   { userId?: string, userEmail?: string }  OR  { email: string }
+// Returns:
+//   { clientSecret: string }
 // -----------------------------
 export async function POST(req: Request) {
   try {
-    if (!stripeSecretKey) {
+    if (!stripe) {
       return NextResponse.json(
         { error: "Stripe is not configured on the server." },
         { status: 500 }
       );
     }
 
-    const body = await req.json().catch(() => ({}));
-    const userEmail: string | undefined =
-      body.userEmail || body.email || undefined;
+    const body = await req.json().catch(() => null);
 
-    if (!userEmail) {
+    if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { error: "Missing userEmail." },
+        { error: "Invalid JSON body." },
         { status: 400 }
       );
     }
 
-    const { databases } = getAppwrite();
+    const userId = (body as any).userId as string | undefined;
+    const email =
+      ((body as any).userEmail as string | undefined) ||
+      ((body as any).email as string | undefined);
 
-    // 1) Find profile by email
-    const profRes = await databases.listDocuments(
-      PROFILES_DB_ID,
-      PROFILES_COLLECTION_ID,
-      [Query.equal("email", userEmail)]
-    );
-
-    if (!profRes.documents.length) {
+    if (!email) {
       return NextResponse.json(
-        { error: "Profile not found for this user." },
-        { status: 404 }
+        { error: "Email (userEmail or email) is required." },
+        { status: 400 }
       );
     }
 
-    const profile = profRes.documents[0] as any;
+    // -----------------------------
+    // 1) Find or create Stripe customer
+    // -----------------------------
+    const existing = await stripe.customers.list({
+      email,
+      limit: 1,
+    });
 
-    // 2) Ensure Stripe Customer
-    let stripeCustomerId: string | null = profile.stripe_customer_id || null;
+    let customer = existing.data[0];
 
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: userEmail,
-        metadata: {
-          appwrite_profile_id: profile.$id,
-          appwrite_email: userEmail,
-        },
+    if (!customer) {
+      customer = await stripe.customers.create({
+        email,
+        metadata: userId ? { appwriteUserId: userId } : undefined,
       });
-
-      stripeCustomerId = customer.id;
-
-      await databases.updateDocument(
-        PROFILES_DB_ID,
-        PROFILES_COLLECTION_ID,
-        profile.$id,
-        {
-          stripe_customer_id: stripeCustomerId,
-        }
-      );
     }
 
-    // 3) Create SetupIntent
+    // -----------------------------
+    // 2) Create SetupIntent to save a card
+    // -----------------------------
     const setupIntent = await stripe.setupIntents.create({
-      customer: stripeCustomerId,
+      customer: customer.id,
       payment_method_types: ["card"],
+      metadata: {
+        email,
+        ...(userId ? { appwriteUserId: userId } : {}),
+      },
     });
 
     if (!setupIntent.client_secret) {
+      console.error(
+        "[create-setup-intent] SetupIntent created without client_secret",
+        setupIntent.id
+      );
       return NextResponse.json(
-        { error: "Stripe did not return a client_secret." },
+        { error: "Failed to create setup intent (no client secret)." },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ clientSecret: setupIntent.client_secret });
+    return NextResponse.json(
+      { clientSecret: setupIntent.client_secret },
+      { status: 200 }
+    );
   } catch (err: any) {
     console.error("[create-setup-intent] error:", err);
     return NextResponse.json(

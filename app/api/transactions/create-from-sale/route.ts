@@ -1,3 +1,4 @@
+// app/api/transactions/create-from-sale/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Client, Databases, ID } from "node-appwrite";
 import nodemailer from "nodemailer";
@@ -5,6 +6,9 @@ import { calculateSettlement } from "@/lib/calculateSettlement";
 
 export const runtime = "nodejs";
 
+// -----------------------------
+// ENV / CONFIG
+// -----------------------------
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
 const project = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const apiKey = process.env.APPWRITE_API_KEY!;
@@ -26,6 +30,10 @@ const smtpUser = process.env.SMTP_USER!;
 const smtpPass = process.env.SMTP_PASS!;
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
+// Fallback admin email
+const adminEmail =
+  process.env.ADMIN_EMAIL || "admin@auctionmyplate.co.uk";
+
 function getAppwriteClient() {
   const client = new Client();
   client.setEndpoint(endpoint);
@@ -35,6 +43,12 @@ function getAppwriteClient() {
 }
 
 function getTransporter() {
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.warn(
+      "[create-from-sale] SMTP not fully configured. Emails will be skipped."
+    );
+  }
+
   return nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
@@ -44,6 +58,35 @@ function getTransporter() {
       pass: smtpPass,
     },
   });
+}
+
+// Never call sendMail with no recipients
+async function safeSendMail(
+  transporter: nodemailer.Transporter,
+  opts: nodemailer.SendMailOptions
+) {
+  const rawTo = opts.to;
+  let recipients: string[] = [];
+
+  if (typeof rawTo === "string") {
+    recipients = rawTo
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  } else if (Array.isArray(rawTo)) {
+    recipients = rawTo.map(String).map((s) => s.trim()).filter(Boolean);
+  }
+
+  if (!recipients.length) {
+    console.warn(
+      "[create-from-sale] safeSendMail: no valid recipients, skipping email."
+    );
+    return;
+  }
+
+  const finalTo = recipients.join(", ");
+  console.log("[create-from-sale] Sending email to:", finalTo);
+  await transporter.sendMail({ ...opts, to: finalTo });
 }
 
 /**
@@ -94,7 +137,9 @@ export async function POST(req: NextRequest) {
     );
 
     const reg = ((listing as any).registration as string) || "Unknown";
-    const sellerEmail = (listing as any).seller_email as string | undefined;
+    const sellerEmail = (listing as any).seller_email as
+      | string
+      | undefined;
 
     if (!sellerEmail) {
       return NextResponse.json(
@@ -104,22 +149,19 @@ export async function POST(req: NextRequest) {
     }
 
     // 2) Work out commission etc
-    const {
-      commissionRate,
-      commissionAmount,
-      sellerPayout,
-      dvlaFee,
-    } = calculateSettlement(finalPrice);
+    const { commissionRate, commissionAmount, sellerPayout, dvlaFee } =
+      calculateSettlement(finalPrice);
 
     const nowIso = new Date().toISOString();
 
-    // 3) Create transaction row in your existing Transactions collection
+    // 3) Create transaction row
     const txDoc = await databases.createDocument(
       txDbId,
       txCollectionId,
       ID.unique(),
       {
         listing_id: listing.$id,
+        registration: reg,
         seller_email: sellerEmail,
         buyer_email: buyerEmail,
         sale_price: finalPrice,
@@ -132,6 +174,7 @@ export async function POST(req: NextRequest) {
         documents: [],
         created_at: nowIso,
         updated_at: nowIso,
+        source: "manual_sale_or_buy_now",
       }
     );
 
@@ -140,7 +183,7 @@ export async function POST(req: NextRequest) {
       status: "sold",
     });
 
-    // 5) Email seller – don't kill the request if this fails
+    // 5) EMAILS (best-effort)
     try {
       const transporter = getTransporter();
 
@@ -148,10 +191,13 @@ export async function POST(req: NextRequest) {
         style: "currency",
         currency: "GBP",
       });
-      const prettyCommission = commissionAmount.toLocaleString("en-GB", {
-        style: "currency",
-        currency: "GBP",
-      });
+      const prettyCommission = commissionAmount.toLocaleString(
+        "en-GB",
+        {
+          style: "currency",
+          currency: "GBP",
+        }
+      );
       const prettyPayout = sellerPayout.toLocaleString("en-GB", {
         style: "currency",
         currency: "GBP",
@@ -161,11 +207,14 @@ export async function POST(req: NextRequest) {
         currency: "GBP",
       });
 
-      const dashboardUrl = `${siteUrl}/dashboard?tab=sales`;
+      const sellerDashboardUrl = `${siteUrl}/dashboard?tab=transactions`;
+      const buyerDashboardUrl = `${siteUrl}/dashboard?tab=transactions`;
+      const adminTxUrl = `${siteUrl}/admin/transaction/${txDoc.$id}`;
 
-      const subject = `Your plate ${reg} has sold on AuctionMyPlate`;
+      // --- Seller email ---
+      const sellerSubject = `Your plate ${reg} has sold on AuctionMyPlate`;
 
-      const text = [
+      const sellerText = [
         `Congratulations!`,
         ``,
         `Your registration ${reg} has sold on AuctionMyPlate for ${prettyPrice}.`,
@@ -175,15 +224,15 @@ export async function POST(req: NextRequest) {
         `Amount due to you: ${prettyPayout}`,
         ``,
         `We will collect payment from the buyer and process the DVLA transfer.`,
-        `Payment to you is usually made within 10 days once the transfer is completed and all documents are received.`,
+        `Payment to you will be made via bank transfer after the transfer is complete and all documents are received.`,
         ``,
         `You can upload your documents and track this sale here:`,
-        dashboardUrl,
+        sellerDashboardUrl,
         ``,
         `Thank you for using AuctionMyPlate.`,
       ].join("\n");
 
-      const html = `
+      const sellerHtml = `
         <p>Congratulations!</p>
         <p>Your registration <strong>${reg}</strong> has sold on AuctionMyPlate for <strong>${prettyPrice}</strong>.</p>
         <p>
@@ -193,24 +242,113 @@ export async function POST(req: NextRequest) {
         </p>
         <p>
           We will collect payment from the buyer and process the DVLA transfer.<br/>
-          Payment to you is usually made within <strong>10 days</strong> once the transfer is completed and all documents are received.
+          Payment to you is usually made <strong>once the transfer is complete</strong> and all documents are received.
         </p>
         <p>
           You can upload your documents and track this sale in your dashboard:<br/>
-          <a href="${dashboardUrl}">${dashboardUrl}</a>
+          <a href="${sellerDashboardUrl}">${sellerDashboardUrl}</a>
         </p>
         <p>Thank you for using AuctionMyPlate.</p>
       `;
 
-      await transporter.sendMail({
+      await safeSendMail(transporter, {
         from: `"AuctionMyPlate" <${smtpUser}>`,
         to: sellerEmail,
-        subject,
-        text,
-        html,
+        subject: sellerSubject,
+        text: sellerText,
+        html: sellerHtml,
+      });
+
+      // --- Buyer email ---
+      const buyerSubject = `You bought ${reg} on AuctionMyPlate`;
+
+      const buyerText = [
+        `Thank you for your purchase!`,
+        ``,
+        `You have bought registration ${reg} on AuctionMyPlate for ${prettyPrice}.`,
+        ``,
+        `A DVLA assignment fee of ${prettyDvla} is included in your total.`,
+        ``,
+        `Our admin team will now contact you if we need any additional information and will process the DVLA transfer for you.`,
+        ``,
+        `You can see your purchase and upload any required documents here:`,
+        buyerDashboardUrl,
+        ``,
+        `Thank you for using AuctionMyPlate.`,
+      ].join("\n");
+
+      const buyerHtml = `
+        <p>Thank you for your purchase!</p>
+        <p>You have bought registration <strong>${reg}</strong> on AuctionMyPlate for <strong>${prettyPrice}</strong>.</p>
+        <p>
+          A DVLA assignment fee of <strong>${prettyDvla}</strong> is included in your total.<br/>
+        </p>
+        <p>
+          Our admin team will now contact you if we need any additional information and will process the DVLA transfer for you.
+        </p>
+        <p>
+          You can see your purchase and upload any required documents in your dashboard:<br/>
+          <a href="${buyerDashboardUrl}">${buyerDashboardUrl}</a>
+        </p>
+        <p>Thank you for using AuctionMyPlate.</p>
+      `;
+
+      await safeSendMail(transporter, {
+        from: `"AuctionMyPlate" <${smtpUser}>`,
+        to: buyerEmail,
+        subject: buyerSubject,
+        text: buyerText,
+        html: buyerHtml,
+      });
+
+      // --- Admin email ---
+      const adminSubject = `SALE COMPLETED: ${reg} for ${prettyPrice}`;
+
+      const adminText = [
+        `A plate has sold on AuctionMyPlate.`,
+        ``,
+        `Registration: ${reg}`,
+        `Sale price: ${prettyPrice}`,
+        `Commission (${commissionRate}%): ${prettyCommission}`,
+        `DVLA fee: ${prettyDvla}`,
+        `Seller payout: ${prettyPayout}`,
+        ``,
+        `Seller: ${sellerEmail}`,
+        `Buyer: ${buyerEmail}`,
+        ``,
+        `Transaction ID: ${txDoc.$id}`,
+        `Admin link: ${adminTxUrl}`,
+      ].join("\n");
+
+      const adminHtml = `
+        <p><strong>SALE COMPLETED</strong></p>
+        <p>
+          Registration: <strong>${reg}</strong><br/>
+          Sale price: <strong>${prettyPrice}</strong><br/>
+          Commission (${commissionRate}%): <strong>${prettyCommission}</strong><br/>
+          DVLA fee: <strong>${prettyDvla}</strong><br/>
+          Seller payout: <strong>${prettyPayout}</strong>
+        </p>
+        <p>
+          Seller: <strong>${sellerEmail}</strong><br/>
+          Buyer: <strong>${buyerEmail}</strong>
+        </p>
+        <p>
+          Transaction ID: <strong>${txDoc.$id}</strong><br/>
+          Admin link: <a href="${adminTxUrl}">${adminTxUrl}</a>
+        </p>
+      `;
+
+      await safeSendMail(transporter, {
+        from: `"AuctionMyPlate" <${smtpUser}>`,
+        to: adminEmail,
+        subject: adminSubject,
+        text: adminText,
+        html: adminHtml,
       });
     } catch (emailErr) {
-      console.error("Failed to send seller email:", emailErr);
+      console.error("[create-from-sale] Email sending failed:", emailErr);
+      // do not throw – transaction is already saved
     }
 
     return NextResponse.json(

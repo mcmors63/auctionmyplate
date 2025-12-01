@@ -1,7 +1,8 @@
-// components/ui/NumberPlate.tsx
+// app/components/ui/NumberPlate.tsx
 "use client";
 
 import React from "react";
+import { formatDvlaRegistration } from "@/lib/formatDvlaRegistration";
 
 type NumberPlateProps = {
   reg: string;
@@ -12,18 +13,6 @@ type NumberPlateProps = {
   onChange?: (v: string) => void;
 };
 
-/** Format into DVLA style → AB12 CDE */
-function formatDVLA(reg: string): string {
-  let cleaned = reg.replace(/\s+/g, "").toUpperCase();
-
-  // Insert the space after 4 characters for UK plates
-  if (cleaned.length > 4) {
-    cleaned = cleaned.slice(0, 4) + " " + cleaned.slice(4);
-  }
-
-  return cleaned;
-}
-
 export default function NumberPlate({
   reg,
   variant = "rear",
@@ -32,7 +21,8 @@ export default function NumberPlate({
   editable = false,
   onChange,
 }: NumberPlateProps) {
-  const formattedReg = formatDVLA(reg);
+  // ✅ Single source of truth for spacing
+  const formattedReg = formatDvlaRegistration(reg || "");
 
   const sizeMap = {
     standard: { width: 350, height: 90, font: 46 },
@@ -44,7 +34,6 @@ export default function NumberPlate({
 
   const bgColour = variant === "rear" ? "bg-dvla-yellow" : "bg-white";
 
-  // Padding so text clears the blue band
   const paddingLeft = showBlueBand ? "26%" : "10%";
   const paddingRight = "10%";
 
@@ -53,7 +42,7 @@ export default function NumberPlate({
       <div
         className={`relative flex h-full w-full items-center justify-center border-[6px] border-black rounded-md overflow-hidden ${bgColour}`}
       >
-        {/* Blue band (UK) – 🔧 reduced width from 18% → 14% */}
+        {/* Blue band (UK) */}
         {showBlueBand && (
           <div className="absolute left-0 top-0 h-full w-[14%] bg-dvla-blue flex items-center justify-center">
             <span className="text-white font-bold text-sm -rotate-90 tracking-widest">
@@ -75,7 +64,8 @@ export default function NumberPlate({
               letterSpacing: "8px",
             }}
             onChange={(e) => {
-              if (onChange) onChange(formatDVLA(e.target.value));
+              const next = formatDvlaRegistration(e.target.value);
+              if (onChange) onChange(next);
             }}
           />
         ) : (
@@ -89,7 +79,7 @@ export default function NumberPlate({
               whiteSpace: "nowrap",
             }}
           >
-            {formattedReg}
+            {formattedReg || "YOUR REG"}
           </span>
         )}
       </div>

@@ -12,6 +12,8 @@ import SellerDocumentsUploader from "@/components/ui/SellerDocumentsUploader";
 import { getAuctionWindow } from "@/lib/getAuctionWindow";
 import Link from "next/link";
 import TransferTimelines from "./TransferTimelines";
+import { formatDvlaRegistration } from "@/lib/formatDvlaRegistration";
+
 
 // -----------------------------
 // Appwrite setup
@@ -536,7 +538,7 @@ export default function DashboardPage() {
     setExpectedReturn(isNaN(expected) ? 0 : expected);
   };
 
-  // --------------------------------------------------------
+    // --------------------------------------------------------
   // SELL FORM HANDLING
   // --------------------------------------------------------
   const handleSellChange = (
@@ -560,10 +562,9 @@ export default function DashboardPage() {
       val = value;
     }
 
+    // ✅ DVLA formatting for registration field
     if (name === "registration") {
-      let reg = value.replace(/\s+/g, "").toUpperCase();
-      if (reg.length > 4) reg = reg.slice(0, 4) + " " + reg.slice(4);
-      val = reg;
+      val = formatDvlaRegistration(value);
     }
 
     setSellForm((prev) => ({

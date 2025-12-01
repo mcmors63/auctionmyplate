@@ -3,7 +3,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import AuctionTimer from "./AuctionTimer"; // ✅ public timer, not AdminAuctionTimer
+import AuctionTimer from "./AuctionTimer";
+import NumberPlate from "@/components/ui/NumberPlate";
+import { formatDvlaRegistration } from "@/lib/formatDvlaRegistration";
 
 type Listing = {
   $id: string;
@@ -18,7 +20,6 @@ type Listing = {
   auction_start?: string | null;
   auction_end?: string | null;
 
-  // extra sale fields we may use
   sold_price?: number | null;
   sale_status?: string | null;
 };
@@ -45,6 +46,13 @@ export default function ListingCard({ listing }: Props) {
   } = listing;
 
   // -----------------------------
+  // Normalised DVLA-style reg
+  // -----------------------------
+  const formattedReg = registration
+    ? formatDvlaRegistration(registration)
+    : "";
+
+  // -----------------------------
   // Status flags
   // -----------------------------
   const lowerStatus = (status || "").toLowerCase();
@@ -53,8 +61,6 @@ export default function ListingCard({ listing }: Props) {
   const isLive = lowerStatus === "live";
   const isQueued = lowerStatus === "queued";
 
-  // 🔴 SOLD: either the main status is "sold", or sale_status is "sold",
-  // or we have a non-zero sold_price recorded.
   const isSold =
     lowerStatus === "sold" ||
     saleStatusLower === "sold" ||
@@ -67,7 +73,7 @@ export default function ListingCard({ listing }: Props) {
     : "AUCTION STARTS IN";
 
   // -----------------------------
-  // "NEW" badge logic
+  // "NEW" badge
   // -----------------------------
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -77,10 +83,10 @@ export default function ListingCard({ listing }: Props) {
 
   const createdMs = $createdAt ? new Date($createdAt).getTime() : null;
   const ageMs = createdMs ? now - createdMs : null;
-  const isNew = ageMs !== null && ageMs < 86400000; // 24 hours
+  const isNew = ageMs !== null && ageMs < 86400000;
 
   // -----------------------------
-  // Reserve status (display only)
+  // Reserve / bids / buy now
   // -----------------------------
   const numericCurrentBid = current_bid ?? 0;
   const hasReserve =
@@ -88,10 +94,6 @@ export default function ListingCard({ listing }: Props) {
   const reserveMet =
     hasReserve && numericCurrentBid >= (reserve_price as number);
 
-  // -----------------------------
-  // Buy Now display logic
-  // -----------------------------
-  // 🔒 Once sold, we NEVER show Buy Now price
   const hasBuyNow =
     isLive && !isSold && typeof buy_now === "number" && buy_now > 0;
 
@@ -100,25 +102,23 @@ export default function ListingCard({ listing }: Props) {
   return (
     <div className="bg-white text-gray-900 border border-gold/40 rounded-xl shadow-md p-4 flex flex-col gap-3 transition hover:shadow-lg w-full">
       {/* HEADER */}
-      <div className="flex flex-col xs:flex-row justify-between gap-2 items-start">
-        {/* Listing ID */}
+      <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-[9px] text-gold">Listing ID</p>
           <p className="font-semibold text-[12px] max-w-[160px] truncate">
             {listing_id || $id}
           </p>
+          {formattedReg && (
+            <p className="mt-1 text-[11px] text-gray-500">
+              Reg:{" "}
+              <span className="font-dvla font-semibold">
+                {formattedReg}
+              </span>
+            </p>
+          )}
         </div>
 
-        {/* Reg */}
-        <div className="ml-auto text-right">
-          <p className="text-[9px] text-gold">Reg</p>
-          <p className="font-bold text-base tracking-wide">
-            {registration}
-          </p>
-        </div>
-
-        {/* BADGES */}
-        <div className="flex flex-row xs:flex-col items-end gap-1 xs:ml-2">
+        <div className="flex flex-col items-end gap-1">
           {isSold && (
             <span className="px-2 py-0.5 text-[9px] font-bold bg-red-600 text-white rounded-full">
               SOLD
@@ -145,48 +145,44 @@ export default function ListingCard({ listing }: Props) {
         </div>
       </div>
 
-      {/* VIRTUAL CAR + PLATE (no JPEG) */}
-      <div className="flex flex-col items-center gap-1.5 py-3 bg-gray-100 rounded-lg border border-gold/20">
-        <div className="relative w-full max-w-[260px] h-40 mx-auto">
-          {/* Car body */}
-          <div className="absolute inset-0 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border border-slate-700 shadow-inner" />
-
-          {/* Windscreen */}
-          <div className="absolute inset-x-[18%] top-[10%] h-[26%] rounded-t-[40%] bg-slate-600/80" />
-
-          {/* Bonnet */}
-          <div className="absolute inset-x-[10%] top-[30%] h-[18%] bg-slate-800 rounded-t-3xl border-t border-slate-600" />
-
-          {/* Bumper */}
-          <div className="absolute inset-x-[8%] bottom-[22%] h-[18%] bg-slate-950 rounded-t-2xl border border-slate-700" />
-
-          {/* Headlights */}
-          <div className="absolute left-[10%] bottom-[26%] w-[18%] h-[18%] rounded-xl bg-slate-300/90 shadow" />
-          <div className="absolute right-[10%] bottom-[26%] w-[18%] h-[18%] rounded-xl bg-slate-300/90 shadow" />
-
-          {/* Grill */}
-          <div className="absolute inset-x-[32%] bottom-[25%] h-[24%] bg-slate-900/80 rounded-md border border-slate-700" />
-
-          {/* Number plate on bumper */}
-          <div className="absolute left-1/2 bottom-[8%] -translate-x-1/2">
-            <div className="bg-yellow-300 text-black font-extrabold tracking-[0.18em] text-base sm:text-lg px-4 py-1.5 rounded-md border border-yellow-700 shadow-[0_0_10px_rgba(0,0,0,0.7)] text-center">
-              {registration}
+      {/* DVLA PLATES – STACKED INSIDE CARD */}
+      <div className="bg-gray-100 rounded-lg border border-gold/20 py-3 px-2 flex flex-col gap-2">
+        <div className="flex flex-col items-center gap-3">
+          {/* FRONT */}
+          <div className="flex flex-col items-center gap-1 w-full">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">
+              Front
+            </span>
+            <div className="w-full flex justify-center">
+              <NumberPlate
+                reg={formattedReg || "AB12 CDE"}
+                variant="front"
+                size="card"
+                showBlueBand={true}
+              />
             </div>
           </div>
 
-          {/* Wheels */}
-          <div className="absolute left-[8%] bottom-[4%] w-[18%] h-[22%] rounded-full bg-black shadow-inner" />
-          <div className="absolute right-[8%] bottom-[4%] w-[18%] h-[22%] rounded-full bg-black shadow-inner" />
+          {/* REAR */}
+          <div className="flex flex-col items-center gap-1 w-full">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">
+              Rear
+            </span>
+            <div className="w-full flex justify-center">
+              <NumberPlate
+                reg={formattedReg || "AB12 CDE"}
+                variant="rear"
+                size="card"
+                showBlueBand={true}
+              />
+            </div>
+          </div>
         </div>
-
-        <p className="text-[9px] text-gray-500">
-          Illustration only &mdash; vehicle image for display purposes.
-        </p>
       </div>
 
-      {/* TIMER + BID INFO – STACK ON MOBILE */}
+      {/* TIMER + BID INFO */}
       <div className="flex flex-col gap-3">
-        {/* TIMER BLOCK */}
+        {/* TIMER */}
         <div className="w-full">
           <p className="text-[9px] text-gray-500 mb-0.5">{timerLabel}</p>
           <div className="px-3 py-1.5 bg-white border border-gold rounded-lg shadow-sm inline-block min-w-[180px]">
@@ -194,10 +190,9 @@ export default function ListingCard({ listing }: Props) {
               <span className="text-[10px] font-semibold text-red-700">
                 Sold – bidding closed
               </span>
-            ) : (isLive || isQueued) ? (
+            ) : isLive || isQueued ? (
               <AuctionTimer
                 mode={isLive ? "live" : "coming"}
-                // queued = countdown to auction_start, live = countdown to auction_end
                 endTime={
                   isLive
                     ? auction_end ?? undefined
@@ -212,11 +207,9 @@ export default function ListingCard({ listing }: Props) {
 
         {/* BID / BUY NOW / BIDS COUNT */}
         <div className="flex flex-col xs:flex-row justify-between gap-2 items-start xs:items-end">
-          {/* Bid + reserve + buy now */}
           <div className="text-left xs:text-right flex-1">
             <p className="text-[9px] text-gold">Bid</p>
             {isSold ? (
-              // 🔒 NEVER show the sold price
               <p className="font-bold text-gray-600 text-sm">Sold</p>
             ) : (
               <p className="font-bold text-gold text-sm">
@@ -236,12 +229,12 @@ export default function ListingCard({ listing }: Props) {
               </p>
             )}
 
-            <p className="text-[8px] text-gray-500 mt-1 leading-tight max-w-[200px]">
-              £80 DVLA paperwork fee added to all winning bids.
+            <p className="text-[8px] text-gray-500 mt-1 leading-tight max-w-[220px]">
+              £80 DVLA paperwork fee is added to all winning bids to cover the
+              transfer process.
             </p>
           </div>
 
-          {/* Bid count */}
           <div className="text-right min-w-[50px]">
             <p className="text-[9px] text-gold">Bids</p>
             <p className="font-semibold text-sm">{bids || 0}</p>
@@ -255,7 +248,7 @@ export default function ListingCard({ listing }: Props) {
           href={`/place_bid?id=${$id}`}
           className="text-blue-600 underline text-[12px]"
         >
-          View
+          View details
         </Link>
 
         {canBid ? (
@@ -263,7 +256,7 @@ export default function ListingCard({ listing }: Props) {
             href={`/place_bid?id=${$id}`}
             className="bg-gold text-black px-3 py-1.5 rounded-md font-bold text-[12px] shadow-sm hover:bg-yellow-400 transition"
           >
-            Bid
+            Bid now
           </Link>
         ) : (
           <Link

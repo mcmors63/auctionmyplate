@@ -121,77 +121,67 @@ export default function AdminPage() {
   }, [authorized, activeTab]);
 
   // ------------------------------------------------------
-// APPROVE LISTING (starting_price included)
-// ------------------------------------------------------
-const approvePlate = async () => {
-  if (!selectedPlate) return;
+  // APPROVE LISTING (starting_price included + schedule window)
+  // ------------------------------------------------------
+  const approvePlate = async () => {
+    if (!selectedPlate) return;
 
-  try {
-    // 1) Call the existing API to do all the current logic
-    const res = await fetch("/api/approve-listing", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        listingId: selectedPlate.$id,
-        sellerEmail: selectedPlate.seller_email,
-        interesting_fact: selectedPlate.interesting_fact || "",
-        starting_price: Number(selectedPlate.starting_price) || 0,
-        reserve_price: Number(selectedPlate.reserve_price) || 0,
-      }),
-    });
-
-    let data: any = null;
     try {
-      data = await res.json();
-    } catch (e) {
-      console.error("approve-listing: failed to parse JSON", e);
-    }
-
-    if (!res.ok || data?.error) {
-      console.error("approve-listing error:", {
-        status: res.status,
-        statusText: res.statusText,
-        data,
+      // 1) Call the existing API to do all the current logic
+      const res = await fetch("/api/approve-listing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: selectedPlate.$id,
+          sellerEmail: selectedPlate.seller_email,
+          interesting_fact: selectedPlate.interesting_fact || "",
+          starting_price: Number(selectedPlate.starting_price) || 0,
+          reserve_price: Number(selectedPlate.reserve_price) || 0,
+        }),
       });
-      throw new Error(data?.error || "Failed to approve plate.");
-    }
 
-    // 2) Work out the next auction window and write it to this plate
-    //    This uses lib/getAuctionWindow.ts
-    const windowInfo = getAuctionWindow();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        console.error("approve-listing: failed to parse JSON", e);
+      }
 
-    // We want the *next* auction week: Monday 01:00 → Sunday 23:00
-    const auctionStartIso = windowInfo.nextStart.toISOString();
-    const auctionEndIso = windowInfo.nextEnd.toISOString();
+      if (!res.ok || data?.error) {
+        console.error("approve-listing error:", {
+          status: res.status,
+          statusText: res.statusText,
+          data,
+        });
+        throw new Error(data?.error || "Failed to approve plate.");
+      }
 
-    await databases.updateDocument(
-      DB_ID,
-      PLATES_COLLECTION_ID,
-      selectedPlate.$id,
-      {
+      // 2) Work out the next auction window and write it to this plate
+      const windowInfo = getAuctionWindow();
+      const auctionStartIso = windowInfo.nextStart.toISOString();
+      const auctionEndIso = windowInfo.nextEnd.toISOString();
+
+      await databases.updateDocument(DB_ID, PLATES_COLLECTION_ID, selectedPlate.$id, {
         auction_start: auctionStartIso,
         auction_end: auctionEndIso,
-      }
-    );
+      });
 
-    // 3) UI feedback + refresh
-    setMessage(
-      `Plate ${selectedPlate.registration} approved & scheduled`
-    );
-    setSelectedPlate(null);
+      // 3) UI feedback + refresh
+      setMessage(`Plate ${selectedPlate.registration} approved & scheduled`);
+      setSelectedPlate(null);
 
-    const updated = await databases.listDocuments(
-      DB_ID,
-      PLATES_COLLECTION_ID,
-      [Query.equal("status", activeTab)]
-    );
+      const updated = await databases.listDocuments(
+        DB_ID,
+        PLATES_COLLECTION_ID,
+        [Query.equal("status", activeTab)]
+      );
 
-    setPlates(updated.documents);
-  } catch (err) {
-    console.error(err);
-    alert("Failed to approve plate.");
-  }
-};
+      setPlates(updated.documents);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to approve plate.");
+    }
+  };
 
   // ------------------------------------------------------
   // REJECT LISTING (server API, defensive JSON handling)
@@ -199,11 +189,7 @@ const approvePlate = async () => {
   const rejectPlate = async (plate: any) => {
     if (!plate) return;
 
-    if (
-      !window.confirm(
-        `Are you sure you want to reject ${plate.registration}?`
-      )
-    ) {
+    if (!window.confirm(`Are you sure you want to reject ${plate.registration}?`)) {
       return;
     }
 
@@ -294,8 +280,7 @@ const approvePlate = async () => {
       return;
     }
 
-    const buyerEmail =
-      window.prompt("Buyer email (optional):", "") || "";
+    const buyerEmail = window.prompt("Buyer email (optional):", "") || "";
 
     try {
       setLoading(true);
@@ -386,61 +371,52 @@ const approvePlate = async () => {
   return (
     <div className="min-h-screen bg-yellow-50 py-10 px-6">
       <div className="max-w-5xl mx-auto bg-white rounded-2xl p-8 shadow-lg">
-              <div className="flex justify-between items-center mb-6">
-        {/* Left: title + DVLA guide link */}
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-bold text-yellow-700">
-            Admin Dashboard
-          </h1>
+        {/* HEADER */}
+        <div className="flex justify-between items-center mb-6">
+          {/* Left: title + DVLA guide link */}
+          <div className="flex flex-col gap-1">
+            <h1 className="text-3xl font-bold text-yellow-700">Admin Dashboard</h1>
 
-          <Link
-            href="/admin/dvla-transfer-guide"
-            className="inline-flex items-center text-xs font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
-          >
-            DVLA Transfer Guide
-            <span aria-hidden="true" className="ml-1">
-              →
-            </span>
-          </Link>
+            <Link
+              href="/admin/dvla-transfer-guide"
+              className="inline-flex items-center text-xs font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+            >
+              DVLA Transfer Guide
+              <span aria-hidden="true" className="ml-1">
+                →
+              </span>
+            </Link>
+          </div>
+
+          {/* Right: logout */}
+          <button className="text-red-600 font-semibold" onClick={logout}>
+            Logout
+          </button>
         </div>
-
-        {/* Right: logout */}
-        <button
-          className="text-red-600 font-semibold"
-          onClick={logout}
-        >
-          Logout
-        </button>
-      </div>
 
         {/* TABS */}
         <div className="flex flex-wrap gap-6 border-b pb-3">
-          {[
-            "pending",
-            "queued",
-            "live",
-            "rejected",
-            "soldPending",
-            "complete",
-          ].map((t) => (
-            <button
-              key={t}
-              className={`pb-2 font-semibold ${
-                activeTab === t
-                  ? "border-b-4 border-yellow-500 text-yellow-700"
-                  : "text-gray-500"
-              }`}
-              onClick={() => setActiveTab(t as AdminTab)}
-            >
-              {t === "queued"
-                ? "Approved / Queued"
-                : t === "soldPending"
-                ? "Sold / Pending"
-                : t === "complete"
-                ? "Complete"
-                : t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
+          {["pending", "queued", "live", "rejected", "soldPending", "complete"].map(
+            (t) => (
+              <button
+                key={t}
+                className={`pb-2 font-semibold ${
+                  activeTab === t
+                    ? "border-b-4 border-yellow-500 text-yellow-700"
+                    : "text-gray-500"
+                }`}
+                onClick={() => setActiveTab(t as AdminTab)}
+              >
+                {t === "queued"
+                  ? "Approved / Queued"
+                  : t === "soldPending"
+                  ? "Sold / Pending"
+                  : t === "complete"
+                  ? "Complete"
+                  : t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            )
+          )}
 
           <a
             href="/admin/auction-manager"
@@ -457,9 +433,7 @@ const approvePlate = async () => {
         )}
 
         {loading && (
-          <p className="text-center text-gray-600 mt-10 text-lg">
-            Loading…
-          </p>
+          <p className="text-center text-gray-600 mt-10 text-lg">Loading…</p>
         )}
 
         {/* LISTINGS VIEW (Pending / Queued / Live / Rejected) */}
@@ -498,17 +472,13 @@ const approvePlate = async () => {
                   <p>
                     <strong>Starting Price:</strong>{" "}
                     {formatMoney(
-                      typeof p.starting_price === "number"
-                        ? p.starting_price
-                        : 0
+                      typeof p.starting_price === "number" ? p.starting_price : 0
                     )}
                   </p>
 
                   <p>
                     <strong>Buy Now:</strong>{" "}
-                    {typeof p.buy_now === "number"
-                      ? formatMoney(p.buy_now)
-                      : "—"}
+                    {typeof p.buy_now === "number" ? formatMoney(p.buy_now) : "—"}
                   </p>
 
                   <p>
@@ -798,6 +768,7 @@ const approvePlate = async () => {
                       <th className="py-2 px-2">Transaction Status</th>
                       <th className="py-2 px-2">Created</th>
                       <th className="py-2 px-2">Updated</th>
+                      <th className="py-2 px-2 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -844,6 +815,14 @@ const approvePlate = async () => {
                             ? new Date(tx.updated_at).toLocaleString("en-GB")
                             : "-"}
                         </td>
+                        <td className="py-2 px-2 text-center whitespace-nowrap">
+                          <a
+                            href={`/admin/transaction/${tx.$id}`}
+                            className="text-xs text-blue-600 underline"
+                          >
+                            View
+                          </a>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -853,7 +832,7 @@ const approvePlate = async () => {
           </div>
         )}
 
-               {/* REVIEW MODAL */}
+        {/* REVIEW MODAL */}
         {selectedPlate && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-2xl w-full max-w-lg relative">
@@ -936,16 +915,16 @@ const approvePlate = async () => {
                   Approve
                 </button>
 
-                         <button
-            onClick={() => rejectPlate(selectedPlate)}
-            className="bg-red-600 text-white py-2 px-4 rounded-md font-semibold"
-          >
-            Reject
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
+                <button
+                  onClick={() => rejectPlate(selectedPlate)}
+                  className="bg-red-600 text-white py-2 px-4 rounded-md font-semibold"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

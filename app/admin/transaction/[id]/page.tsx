@@ -244,6 +244,45 @@ export default function AdminTransactionPage() {
     }
   };
 
+  // 🔥 HARD OVERRIDE: mark complete even if flags/business rules
+  const handleMarkCompleteOverride = async () => {
+    if (!tx) return;
+
+    const ok = window.confirm(
+      "Force mark this transaction as COMPLETE?\n\n" +
+        "Use this only when you’re happy the DVLA transfer and payments are finished."
+    );
+    if (!ok) return;
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const updateData = {
+        ...sellerFlags,
+        ...buyerFlags,
+        payment_status: tx.payment_status || "paid",
+        transaction_status: "complete",
+        updated_at: new Date().toISOString(),
+      };
+
+      const updated: any = await databases.updateDocument(
+        DB_ID,
+        TX_COLLECTION_ID,
+        tx.$id,
+        updateData
+      );
+
+      setTx(updated);
+      alert("Transaction marked COMPLETE.");
+    } catch (err) {
+      console.error("Failed to mark transaction complete:", err);
+      setError("Failed to mark transaction complete.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDeleteTransaction = async () => {
     if (!tx) return;
 
@@ -567,6 +606,15 @@ export default function AdminTransactionPage() {
                 className="bg-yellow-600 text-white px-6 py-2 rounded-md font-semibold disabled:opacity-60"
               >
                 {saving ? "Saving…" : "Save Progress"}
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleMarkCompleteOverride}
+                className="bg-emerald-600 text-white px-6 py-2 rounded-md font-semibold disabled:opacity-60"
+              >
+                Force Mark Complete
               </button>
 
               <button

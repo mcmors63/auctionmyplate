@@ -1,6 +1,6 @@
 // app/api/auction-scheduler/route.ts
 import { NextResponse } from "next/server";
-import { Client, Databases, Query, ID } from "node-appwrite"; // 👈 MUST be node-appwrite
+import { Client, Databases, Query, ID } from "node-appwrite";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -37,7 +37,7 @@ const TRANSACTIONS_COLLECTION_ID =
 const client = new Client()
   .setEndpoint(endpoint)
   .setProject(projectId)
-  .setKey(apiKey); // ✅ only on node-appwrite Client
+  .setKey(apiKey);
 
 const databases = new Databases(client);
 
@@ -68,7 +68,7 @@ function parseTimestamp(ts: any): number {
 }
 
 // -----------------------------
-// Helper: create transaction doc (best-effort)
+// Helper: create transaction doc (aligned with your schema)
 // -----------------------------
 async function createTransactionForWinner(params: {
   listing: any;
@@ -87,31 +87,44 @@ async function createTransactionForWinner(params: {
   const {
     listing,
     finalBidAmount,
-    totalWithDvla,
+    totalWithDvla, // not stored directly, but useful later if you want it
     winnerEmail,
     paymentIntentId,
   } = params;
 
+  const nowIso = new Date().toISOString();
+
   const listingId = listing.$id as string;
   const reg = (listing.registration as string | undefined) || "";
-  const listingRef =
-    (listing.listing_id as string | undefined) || listingId;
-
   const sellerEmail = (listing.seller_email as string | undefined) || "";
 
+  // Match your Transactions table:
+  // sale_price (int), commission_rate (int), commission_amount (int),
+  // seller_payout (int), dvla_fee (int)
+  const commissionRate = getNumeric(listing.commission_rate); // e.g. 10 = 10%
+  const salePriceInt = Math.round(finalBidAmount);
+  const commissionAmount = Math.round(
+    commissionRate > 0 ? (salePriceInt * commissionRate) / 100 : 0
+  );
+  const sellerPayout = salePriceInt - commissionAmount;
+
   const data: Record<string, any> = {
+    // required fields
     listing_id: listingId,
-    listing_ref: listingRef,
-    registration: reg,
-    buyer_email: winnerEmail,
     seller_email: sellerEmail,
-    final_bid: finalBidAmount,
+    buyer_email: winnerEmail,
+    sale_price: salePriceInt,
+    commission_rate: commissionRate,
+    commission_amount: commissionAmount,
+    seller_payout: sellerPayout,
     dvla_fee: DVLA_FEE_GBP,
-    total_charged: totalWithDvla,
+    transaction_status: "pending_documents",
+    created_at: nowIso,
+
+    // optional but useful
+    payment_status: "paid",
+    registration: reg,
     stripe_payment_intent_id: paymentIntentId,
-    status: "pending_documents",
-    source: "auction_scheduler",
-    type: "auction_winner",
   };
 
   try {
@@ -200,10 +213,8 @@ export async function GET() {
 
     // ---------------------------------
     // 3) Charge winners for just-completed listings
-    //    (if Stripe + BIDS collection are configured)
     // ---------------------------------
     if (!stripe || !BIDS_COLLECTION_ID) {
-      // We still return success, but explain why no charges done
       return NextResponse.json({
         ok: true,
         now: nowIso,

@@ -40,7 +40,6 @@ const PLATES_COLLECTION_ID =
 
 // Transactions use the SAME database as plates
 const TX_DB_ID = PLATES_DB_ID;
-<TransferTimelines />
 
 // IMPORTANT: hard-code to the actual collection id you see in Appwrite
 const TX_COLLECTION_ID = "transactions";

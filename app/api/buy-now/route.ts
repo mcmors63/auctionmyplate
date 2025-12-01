@@ -1,64 +1,71 @@
 // app/api/buy-now/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Client, Databases, ID } from "node-appwrite";
 import nodemailer from "nodemailer";
+import { calculateSettlement } from "@/lib/calculateSettlement";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 // -----------------------------
-// ENV VARS
+// ENV: Appwrite
 // -----------------------------
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const apiKey = process.env.APPWRITE_API_KEY!;
 
-const PLATES_DB = process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!;
-const PLATES_COLLECTION = process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!;
+const PLATES_DB_ID =
+  process.env.APPWRITE_PLATES_DATABASE_ID ||
+  process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID ||
+  "690fc34a0000ce1baa63";
 
-// Transactions live in same DB, separate collection
-const TRANSACTIONS_COLLECTION =
-  process.env.APPWRITE_TRANSACTIONS_COLLECTION_ID || "";
+const PLATES_COLLECTION_ID =
+  process.env.APPWRITE_PLATES_COLLECTION_ID ||
+  process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID ||
+  "plates";
 
-// Email config
-const smtpHost = process.env.SMTP_HOST;
-const smtpPort = process.env.SMTP_PORT
-  ? parseInt(process.env.SMTP_PORT, 10)
-  : 587;
-const smtpUser = process.env.SMTP_USER;
-const smtpPass = process.env.SMTP_PASS;
-const fromEmail =
-  process.env.FROM_EMAIL || "AuctionMyPlate <no-reply@auctionmyplate.co.uk>";
+// Transactions DB – fall back safely to plates DB
+const TX_DB_ID =
+  process.env.APPWRITE_TRANSACTIONS_DATABASE_ID ||
+  process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_DATABASE_ID ||
+  PLATES_DB_ID;
+
+const TX_COLLECTION_ID =
+  process.env.APPWRITE_TRANSACTIONS_COLLECTION_ID ||
+  process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID ||
+  "transactions";
+
+// -----------------------------
+// ENV: SMTP / Site
+// -----------------------------
+const smtpHost = process.env.SMTP_HOST || "";
+const smtpPort = Number(process.env.SMTP_PORT || "465");
+const smtpUser = process.env.SMTP_USER || "";
+const smtpPass = process.env.SMTP_PASS || "";
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://auctionmyplate.vercel.app";
 const adminEmail =
-  process.env.ADMIN_NOTIFICATIONS_EMAIL || "admin@auctionmyplate.co.uk";
+  process.env.ADMIN_EMAIL || "admin@auctionmyplate.co.uk";
+
+const DVLA_FEE_GBP = 80;
 
 // -----------------------------
-// APPWRITE CLIENT
+// Helpers
 // -----------------------------
-const client = new Client()
-  .setEndpoint(endpoint)
-  .setProject(projectId)
-  .setKey(apiKey);
-
-const databases = new Databases(client);
-
-// -----------------------------
-// HELPERS
-// -----------------------------
-function getBuyNowPrice(listing: any): number | null {
-  const raw =
-    (typeof listing.buy_now === "number" ? listing.buy_now : null) ??
-    (typeof listing.buy_now_price === "number" ? listing.buy_now_price : null);
-
-  if (typeof raw === "number" && raw > 0) return raw;
-  return null;
+function getAppwriteClient() {
+  const client = new Client();
+  client.setEndpoint(endpoint);
+  client.setProject(projectId);
+  client.setKey(apiKey);
+  return client;
 }
 
-function hasSmtpConfig() {
-  return Boolean(smtpHost && smtpUser && smtpPass);
-}
+function getTransporter() {
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.warn(
+      "[buy-now] SMTP not fully configured. Emails will be skipped."
+    );
+  }
 
-function createTransport() {
   return nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
@@ -70,435 +77,357 @@ function createTransport() {
   });
 }
 
-async function sendSaleEmails(params: {
-  registration: string | undefined;
-  listingRef: string;
-  finalPrice: number;
-  buyerEmail: string;
-  sellerEmail?: string | null;
-}) {
-  if (!hasSmtpConfig()) {
-    console.warn(
-      "[buy-now] SMTP not configured, skipping sale notification emails."
-    );
-    return;
+/**
+ * Safe wrapper so we never call sendMail with an empty "to"
+ */
+async function safeSendMail(
+  transporter: nodemailer.Transporter,
+  opts: nodemailer.SendMailOptions,
+  label: string
+) {
+  const rawTo = opts.to;
+  let recipients: string[] = [];
+
+  if (typeof rawTo === "string") {
+    recipients = rawTo
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  } else if (Array.isArray(rawTo)) {
+    recipients = rawTo.map(String).map((s) => s.trim()).filter(Boolean);
   }
 
-  const transporter = createTransport();
-
-  const { registration, listingRef, finalPrice, buyerEmail, sellerEmail } =
-    params;
-
-  const regText = registration || "your number plate";
-  const priceText = `£${finalPrice.toLocaleString()}`;
-
-  const buyerSubject = `You’ve secured ${regText} on AuctionMyPlate!`;
-  const sellerSubject = `Your plate ${regText} has SOLD on AuctionMyPlate!`;
-  const adminSubject = `AuctionMyPlate – ${regText} sold via Buy Now`;
-
-  const buyerBody = `
-Hi,
-
-Great news – you’ve successfully used Buy Now on AuctionMyPlate.
-
-You’ve secured ${regText} for ${priceText}.
-
-Listing reference: ${listingRef}
-Registration: ${regText}
-Final price (Buy Now): ${priceText}
-
-An £80 DVLA paperwork fee will be added to your final invoice as per our terms.
-
-What happens next:
-- You will receive a 2nd email requesting what documentation you need to upload in your Dashboard.
-- Once this is received, we will begin the transfer process on your behalf.
-
-If you have any questions, just reply to this email.
-
-Regards,
-AuctionMyPlate
-`.trim();
-
-  const sellerBody = `
-Hi,
-
-Fantastic news – your plate ${regText} has SOLD on AuctionMyPlate via Buy Now for ${priceText}.
-
-Listing reference: ${listingRef}
-Registration: ${regText}
-Final price (Buy Now): ${priceText}
-
-What happens next:
-- You will receive a 2nd email requesting what documentation you need to upload in your Dashboard.
-- Once this is received, we will begin the transfer process on your behalf.
-
-You don’t need to do anything right now – we’ll be in touch shortly with next steps.
-
-Regards,
-AuctionMyPlate
-`.trim();
-
-  const adminBody = `
-Admin notification – Buy Now sale
-
-Buyer: ${buyerEmail}
-Seller: ${sellerEmail || "Unknown / not stored"}
-Listing reference: ${listingRef}
-Registration: ${regText}
-Final price (Buy Now): ${priceText}
-
-Please ensure payment is collected and DVLA paperwork is processed.
-`.trim();
-
-  const jobs: Promise<any>[] = [];
-
-  // Buyer notification
-  jobs.push(
-    transporter.sendMail({
-      from: fromEmail,
-      to: buyerEmail,
-      subject: buyerSubject,
-      text: buyerBody,
-    })
-  );
-
-  // Seller notification (if we have seller_email on the listing)
-  if (sellerEmail) {
-    jobs.push(
-      transporter.sendMail({
-        from: fromEmail,
-        to: sellerEmail,
-        subject: sellerSubject,
-        text: sellerBody,
-      })
-    );
+  if (!recipients.length) {
+    console.warn(`[buy-now] ${label}: no valid recipients, skipping email.`);
+    return { ok: false, error: "No valid recipients" };
   }
 
-  // Admin notification
-  if (adminEmail) {
-    jobs.push(
-      transporter.sendMail({
-        from: fromEmail,
-        to: adminEmail,
-        subject: `[ADMIN] ${adminSubject}`,
-        text: adminBody,
-      })
-    );
-  }
+  const finalTo = recipients.join(", ");
+  console.log(`[buy-now] Sending ${label} email to:`, finalTo);
 
-  try {
-    await Promise.all(jobs);
-    console.log("[buy-now] Sale emails sent.");
-  } catch (err) {
-    console.error("[buy-now] Failed to send one or more sale emails:", err);
-  }
-}
+  await transporter.sendMail({ ...opts, to: finalTo });
 
-async function sendDocRequestEmails(params: {
-  registration: string | undefined;
-  listingRef: string;
-  buyerEmail: string;
-  sellerEmail?: string | null;
-}) {
-  if (!hasSmtpConfig()) {
-    console.warn(
-      "[buy-now] SMTP not configured, skipping document request emails."
-    );
-    return;
-  }
-
-  const transporter = createTransport();
-
-  const { registration, listingRef, buyerEmail, sellerEmail } = params;
-
-  const regText = registration || "your number plate";
-
-  const buyerSubject = `Documents required for ${regText} – AuctionMyPlate`;
-  const sellerSubject = `Documents required – ${regText} sale on AuctionMyPlate`;
-
-  const commonLines = `
-Listing reference: ${listingRef}
-Registration: ${regText}
-
-To move forward, we now need you to upload specific documentation through your AuctionMyPlate Dashboard.
-`.trim();
-
-  const buyerBody = `
-Hi,
-
-This is your documents request email for your recent purchase.
-
-${commonLines}
-
-Please log in to your Dashboard and go to:
-My Dashboard → Transactions
-
-Select the transaction for ${regText} and follow the instructions to upload the required documents. 
-The exact documents needed will be shown in your Dashboard, but may include:
-- Proof of ID
-- Proof of address
-- DVLA documentation (e.g. V5C, V750 or retention certificate)
-
-Once your documents are uploaded and verified, we will begin the transfer process on your behalf.
-
-Regards,
-AuctionMyPlate
-`.trim();
-
-  const sellerBody = `
-Hi,
-
-This is your documents request email for the sale of your plate.
-
-${commonLines}
-
-Please log in to your Dashboard and go to:
-My Dashboard → Transactions
-
-Select the transaction for ${regText} and follow the instructions to upload the required documents. 
-The exact documents needed will be shown in your Dashboard, but may include:
-- DVLA documentation for the plate
-- Proof of ID
-- Any supporting paperwork requested in the transaction view
-
-Once your documents are uploaded and verified, we will begin the transfer process on your behalf.
-
-Regards,
-AuctionMyPlate
-`.trim();
-
-  const jobs: Promise<any>[] = [];
-
-  // Buyer docs email
-  jobs.push(
-    transporter.sendMail({
-      from: fromEmail,
-      to: buyerEmail,
-      subject: buyerSubject,
-      text: buyerBody,
-    })
-  );
-
-  // Seller docs email (if seller_email is known)
-  if (sellerEmail) {
-    jobs.push(
-      transporter.sendMail({
-        from: fromEmail,
-        to: sellerEmail,
-        subject: sellerSubject,
-        text: sellerBody,
-      })
-    );
-  }
-
-  try {
-    await Promise.all(jobs);
-    console.log("[buy-now] Document request emails sent.");
-  } catch (err) {
-    console.error(
-      "[buy-now] Failed to send one or more document request emails:",
-      err
-    );
-  }
+  return { ok: true, sentTo: finalTo };
 }
 
 // -----------------------------
-// ROUTE
+// POST /api/buy-now
+// Body from frontend:
+// {
+//   listingId: string;
+//   userEmail: string;
+//   userId?: string;
+//   paymentIntentId?: string;
+//   totalCharged: number; // buy now + £80 DVLA
+// }
 // -----------------------------
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const {
-      listingId,
-      userId,
-      userEmail,
-      paymentIntentId,
-      totalCharged,
-    } = body || {};
+    const body = await req.json().catch(() => ({}));
 
-    console.log("buy-now incoming:", {
+    const listingId = body.listingId as string | undefined;
+    const buyerEmail = body.userEmail as string | undefined;
+    const buyerId = body.userId as string | undefined;
+    const paymentIntentId = body.paymentIntentId as string | undefined;
+    const totalCharged = Number(body.totalCharged);
+
+    console.log("[buy-now] Incoming", {
       listingId,
-      userId,
-      userEmail,
+      buyerEmail,
+      buyerId,
       paymentIntentId,
       totalCharged,
     });
 
-    // -----------------------------
-    // BASIC VALIDATION
-    // -----------------------------
     if (!listingId) {
       return NextResponse.json(
-        { error: "Missing listingId." },
+        { error: "listingId is required." },
         { status: 400 }
       );
     }
 
-    if (!userEmail) {
+    if (!buyerEmail) {
       return NextResponse.json(
-        { error: "Missing userEmail." },
+        { error: "userEmail (buyerEmail) is required." },
         { status: 400 }
       );
     }
 
-    const finalUserId =
-      typeof userId === "string" && userId.trim().length > 0
-        ? userId
-        : "unknown";
-
-    // -----------------------------
-    // LOAD LISTING
-    // -----------------------------
-    let listing: any;
-    try {
-      listing = await databases.getDocument(
-        PLATES_DB,
-        PLATES_COLLECTION,
-        listingId
-      );
-    } catch (err) {
-      console.error("getDocument failed for listing (buy-now):", listingId, err);
+    if (!totalCharged || !Number.isFinite(totalCharged) || totalCharged <= 0) {
       return NextResponse.json(
-        { error: "Listing not found." },
-        { status: 404 }
-      );
-    }
-
-    if (listing.status !== "live") {
-      return NextResponse.json(
-        { error: "This listing is not currently live." },
+        { error: "totalCharged must be a positive number." },
         { status: 400 }
       );
     }
 
-    // Optional: ensure auction hasn't already ended
-    if (listing.auction_end) {
-      const now = new Date();
-      const endTime = new Date(listing.auction_end);
-      if (now > endTime) {
-        return NextResponse.json(
-          { error: "This auction has already ended." },
-          { status: 400 }
-        );
-      }
-    }
+    const appwriteClient = getAppwriteClient();
+    const databases = new Databases(appwriteClient);
 
-    const buyNowPrice = getBuyNowPrice(listing);
+    // 1) Load the listing
+    const listing = await databases.getDocument(
+      PLATES_DB_ID,
+      PLATES_COLLECTION_ID,
+      listingId
+    );
 
-    if (!buyNowPrice) {
+    const reg = ((listing as any).registration as string) || "Unknown";
+    const sellerEmail = (listing as any).seller_email as string | undefined;
+    const currentStatus = (listing as any).status as string | undefined;
+
+    console.log("[buy-now] Loaded listing", {
+      listingId: listing.$id,
+      reg,
+      sellerEmail,
+      currentStatus,
+    });
+
+    if (currentStatus && currentStatus.toLowerCase() === "sold") {
       return NextResponse.json(
-        { error: "Buy Now is not available for this listing." },
+        { error: "This listing is already sold." },
         { status: 400 }
       );
     }
 
-    // -----------------------------
-    // UPDATE LISTING
-    // -----------------------------
-    const newBidsCount =
-      typeof listing.bids === "number" ? listing.bids + 1 : 1;
+    if (!sellerEmail) {
+      console.warn(
+        "[buy-now] Listing has no seller_email, seller emails will be skipped."
+      );
+    }
 
-    const updatedListing = await databases.updateDocument(
-      PLATES_DB,
-      PLATES_COLLECTION,
-      listing.$id,
+    // 2) Work out sale price (hammer price) and settlement details
+    const buyNowValue =
+      Number((listing as any).buy_now) ||
+      Number((listing as any).buy_now_price) ||
+      0;
+
+    // salePrice = hammer price (without DVLA fee)
+    const salePrice =
+      buyNowValue > 0
+        ? buyNowValue
+        : Math.max(0, totalCharged - DVLA_FEE_GBP);
+
+    const {
+      commissionRate,
+      commissionAmount,
+      sellerPayout,
+      dvlaFee,
+    } = calculateSettlement(salePrice);
+
+    const nowIso = new Date().toISOString();
+
+    // 3) Create transaction document
+    const txDoc = await databases.createDocument(
+      TX_DB_ID,
+      TX_COLLECTION_ID,
+      ID.unique(),
       {
-        status: "sold", // adjust if your sold status is different
-        current_bid: buyNowPrice,
-        bids: newBidsCount,
+        listing_id: listing.$id,
+        registration: reg,
+        seller_email: sellerEmail || null,
+        buyer_email: buyerEmail,
+        buyer_id: buyerId || null,
+        sale_price: salePrice,
+        commission_rate: commissionRate,
+        commission_amount: commissionAmount,
+        seller_payout: sellerPayout,
+        dvla_fee: dvlaFee,
+        total_charged: totalCharged,
+        stripe_payment_intent_id: paymentIntentId || null,
+        payment_status: "paid",
+        transaction_status: "awaiting_documents",
+        documents: [],
+        created_at: nowIso,
+        updated_at: nowIso,
+        source: "buy_now",
       }
     );
 
-    // -----------------------------
-    // CREATE TRANSACTION (if configured)
-    // -----------------------------
-    const listingRef =
-      listing.listing_id ||
-      `AMP-${String(listing.$id).slice(-6).toUpperCase()}`;
+    console.log("[buy-now] Created transaction", { txId: txDoc.$id });
 
-    const sellerEmail: string | null =
-      typeof listing.seller_email === "string" ? listing.seller_email : null;
-
-    let transactionDoc: any = null;
-
-    if (TRANSACTIONS_COLLECTION) {
-      try {
-        const dvlaFee = 80;
-        const totalPayable = buyNowPrice + dvlaFee;
-        const nowIso = new Date().toISOString();
-
-        transactionDoc = await databases.createDocument(
-          PLATES_DB,
-          TRANSACTIONS_COLLECTION,
-          ID.unique(),
-          {
-            listing_id: listing.$id,
-            listing_ref: listingRef,
-            registration: listing.registration,
-            buyer_email: userEmail,
-            seller_email: sellerEmail,
-            final_price: buyNowPrice,
-            dvla_fee: dvlaFee,
-            total_payable: totalPayable,
-            total_charged:
-              typeof totalCharged === "number" ? totalCharged : null,
-            payment_intent_id:
-              typeof paymentIntentId === "string" ? paymentIntentId : null,
-
-            // 🔐 NEW: record Stripe payment + transaction state
-            payment_status: "paid",
-            transaction_status: "awaiting_documents",
-
-            // Existing generic status field (keep for compatibility)
-            status: "pending_docs",
-            channel: "buy_now",
-            timestamp: nowIso,
-            buyer_appwrite_id: finalUserId,
-          }
-        );
-
-        console.log("[buy-now] Transaction created:", transactionDoc.$id);
-      } catch (err) {
-        console.error("[buy-now] Failed to create transaction document:", err);
-        // Not fatal for the sale – listing is already marked sold
+    // 4) Update the plate as sold
+    const updatedListing = await databases.updateDocument(
+      PLATES_DB_ID,
+      PLATES_COLLECTION_ID,
+      listing.$id,
+      {
+        status: "sold",
+        buyer_email: buyerEmail,
+        buyer_id: buyerId || null,
+        sold_price: salePrice,
+        sale_status: "buy_now_sold",
+        payout_status: "pending",
       }
+    );
+
+    // 5) Send emails (buyer, seller, admin) – best effort, non-fatal
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      console.warn("[buy-now] SMTP not configured – skipping all emails.");
     } else {
-      console.warn(
-        "[buy-now] APPWRITE_TRANSACTIONS_COLLECTION_ID not set – skipping transaction creation."
-      );
+      const transporter = getTransporter();
+
+      const prettyPrice = salePrice.toLocaleString("en-GB", {
+        style: "currency",
+        currency: "GBP",
+      });
+      const prettyCommission = commissionAmount.toLocaleString("en-GB", {
+        style: "currency",
+        currency: "GBP",
+      });
+      const prettyPayout = sellerPayout.toLocaleString("en-GB", {
+        style: "currency",
+        currency: "GBP",
+      });
+      const prettyDvla = dvlaFee.toLocaleString("en-GB", {
+        style: "currency",
+        currency: "GBP",
+      });
+
+      const dashboardUrl = `${siteUrl}/dashboard?tab=transactions`;
+
+      // Buyer email
+      try {
+        await safeSendMail(
+          transporter,
+          {
+            from: `"AuctionMyPlate" <${smtpUser}>`,
+            to: buyerEmail,
+            subject: `You bought ${reg} on AuctionMyPlate`,
+            text: [
+              `Thank you for your purchase!`,
+              ``,
+              `You have successfully purchased ${reg} for ${prettyPrice}.`,
+              ``,
+              `DVLA assignment fee: ${prettyDvla} (included in your payment where applicable).`,
+              ``,
+              `We will now process the DVLA transfer. If we need any further information we will contact you by email.`,
+              ``,
+              `You can view this transaction in your dashboard:`,
+              dashboardUrl,
+              ``,
+              `Thank you for using AuctionMyPlate.`,
+            ].join("\n"),
+            html: `
+              <p>Thank you for your purchase!</p>
+              <p>You have successfully purchased <strong>${reg}</strong> for <strong>${prettyPrice}</strong>.</p>
+              <p>
+                DVLA assignment fee: <strong>${prettyDvla}</strong> (included in your payment where applicable).
+              </p>
+              <p>
+                We will now process the DVLA transfer.<br/>
+                If we need any further information we will contact you by email.
+              </p>
+              <p>
+                You can view this transaction in your dashboard:<br/>
+                <a href="${dashboardUrl}">${dashboardUrl}</a>
+              </p>
+              <p>Thank you for using AuctionMyPlate.</p>
+            `,
+          },
+          "buyer"
+        );
+      } catch (buyerErr) {
+        console.error("[buy-now] Buyer email failed:", buyerErr);
+      }
+
+      // Seller email
+      try {
+        if (sellerEmail) {
+          await safeSendMail(
+            transporter,
+            {
+              from: `"AuctionMyPlate" <${smtpUser}>`,
+              to: sellerEmail,
+              subject: `Your plate ${reg} has sold on AuctionMyPlate`,
+              text: [
+                `Congratulations!`,
+                ``,
+                `Your registration ${reg} has sold on AuctionMyPlate for ${prettyPrice}.`,
+                ``,
+                `Our commission (${commissionRate}%): ${prettyCommission}`,
+                `DVLA assignment fee (paid by buyer): ${prettyDvla}`,
+                `Amount due to you: ${prettyPayout}`,
+                ``,
+                `We will collect payment from the buyer and process the DVLA transfer.`,
+                `Payment to you is usually made once the transfer is complete and all documents are received.`,
+                ``,
+                `You can upload your documents and track this sale here:`,
+                dashboardUrl,
+                ``,
+                `Thank you for using AuctionMyPlate.`,
+              ].join("\n"),
+              html: `
+                <p>Congratulations!</p>
+                <p>Your registration <strong>${reg}</strong> has sold on AuctionMyPlate for <strong>${prettyPrice}</strong>.</p>
+                <p>
+                  Our commission (${commissionRate}%): <strong>${prettyCommission}</strong><br/>
+                  DVLA assignment fee (paid by buyer): <strong>${prettyDvla}</strong><br/>
+                  Amount due to you: <strong>${prettyPayout}</strong>
+                </p>
+                <p>
+                  We will collect payment from the buyer and process the DVLA transfer.<br/>
+                  Payment to you is usually made <strong>once the transfer is complete</strong> and all documents are received.
+                </p>
+                <p>
+                  You can upload your documents and track this sale in your dashboard:<br/>
+                  <a href="${dashboardUrl}">${dashboardUrl}</a>
+                </p>
+                <p>Thank you for using AuctionMyPlate.</p>
+              `,
+            },
+            "seller"
+          );
+        } else {
+          console.warn(
+            "[buy-now] No seller_email on listing, seller email skipped."
+          );
+        }
+      } catch (sellerErr) {
+        console.error("[buy-now] Seller email failed:", sellerErr);
+      }
+
+      // Admin email
+      try {
+        await safeSendMail(
+          transporter,
+          {
+            from: `"AuctionMyPlate" <${smtpUser}>`,
+            to: adminEmail,
+            subject: `New Buy Now sale: ${reg}`,
+            text: [
+              `A plate has been sold using Buy Now on AuctionMyPlate.`,
+              ``,
+              `Registration: ${reg}`,
+              `Sale price (hammer): ${prettyPrice}`,
+              `Commission (${commissionRate}%): ${prettyCommission}`,
+              `DVLA fee: ${prettyDvla}`,
+              `Seller payout: ${prettyPayout}`,
+              ``,
+              `Seller: ${sellerEmail || "N/A"}`,
+              `Buyer: ${buyerEmail}`,
+              ``,
+              `Transaction ID: ${txDoc.$id}`,
+              ``,
+              `You can view this transaction in the admin dashboard.`,
+            ].join("\n"),
+          },
+          "admin"
+        );
+      } catch (adminErr) {
+        console.error("[buy-now] Admin email failed:", adminErr);
+      }
     }
 
-    // -----------------------------
-    // SEND EMAILS (non-blocking)
-    // -----------------------------
-    sendSaleEmails({
-      registration: listing.registration,
-      listingRef,
-      finalPrice: buyNowPrice,
-      buyerEmail: userEmail,
-      sellerEmail,
-    }).catch((err) => {
-      console.error("[buy-now] sendSaleEmails threw:", err);
-    });
-
-    sendDocRequestEmails({
-      registration: listing.registration,
-      listingRef,
-      buyerEmail: userEmail,
-      sellerEmail,
-    }).catch((err) => {
-      console.error("[buy-now] sendDocRequestEmails threw:", err);
-    });
-
-    return NextResponse.json({
-      ok: true,
-      updatedListing,
-      transaction: transactionDoc,
-    });
-  } catch (err: any) {
-    console.error("buy-now route fatal error:", err);
     return NextResponse.json(
-      { error: err?.message || "Buy Now failed." },
+      {
+        ok: true,
+        updatedListing,
+      },
+      { status: 200 }
+    );
+  } catch (err: any) {
+    console.error("[buy-now] fatal error:", err);
+    return NextResponse.json(
+      { error: err?.message || "Failed to process Buy Now purchase." },
       { status: 500 }
     );
   }

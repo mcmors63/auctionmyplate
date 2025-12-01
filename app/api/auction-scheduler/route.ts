@@ -84,16 +84,20 @@ async function createTransactionForWinner(params: {
     return;
   }
 
-  const { listing, finalBidAmount, totalWithDvla, winnerEmail, paymentIntentId } =
-    params;
+  const {
+    listing,
+    finalBidAmount,
+    totalWithDvla,
+    winnerEmail,
+    paymentIntentId,
+  } = params;
 
   const listingId = listing.$id as string;
   const reg = (listing.registration as string | undefined) || "";
   const listingRef =
     (listing.listing_id as string | undefined) || listingId;
 
-  const sellerEmail =
-    (listing.seller_email as string | undefined) || "";
+  const sellerEmail = (listing.seller_email as string | undefined) || "";
 
   const data: Record<string, any> = {
     listing_id: listingId,
@@ -136,29 +140,34 @@ export async function GET() {
   try {
     const now = new Date();
     const nowIso = now.toISOString();
+    const nowTs = now.getTime();
 
-   // 1) Promote queued -> live
-const queuedRes = await databases.listDocuments(
-  DB_ID,
-  PLATES_COLLECTION_ID,
-  [
-    // handle both "queued" and the old "approvedQueued" if any still exist
-    Query.equal("status", ["queued", "approvedQueued"]),
-    Query.lessThanEqual("auction_start", nowIso),
-    Query.limit(200),
-  ]
-);
+    // ---------------------------------
+    // 1) Promote queued -> live
+    // ---------------------------------
+    const queuedRes = await databases.listDocuments(
+      DB_ID,
+      PLATES_COLLECTION_ID,
+      [
+        // Handle both "queued" and older "approvedQueued" status
+        Query.equal("status", ["queued", "approvedQueued"]),
+        Query.limit(200),
+      ]
+    );
 
     let promoted = 0;
+
     for (const doc of queuedRes.documents as any[]) {
-      await databases.updateDocument(
-        DB_ID,
-        PLATES_COLLECTION_ID,
-        doc.$id,
-        {
-          status: "live",
-        }
-      );
+      const startTs = parseTimestamp(doc.auction_start);
+
+      // If auction_start exists and is in the future, skip for now
+      if (startTs && startTs > nowTs) {
+        continue;
+      }
+
+      await databases.updateDocument(DB_ID, PLATES_COLLECTION_ID, doc.$id, {
+        status: "live",
+      });
       promoted++;
     }
 
@@ -235,11 +244,10 @@ const queuedRes = await databases.listDocuments(
       // ---- Load bids for this listing ----
       let bidsRes;
       try {
-        bidsRes = await databases.listDocuments(
-          DB_ID,
-          BIDS_COLLECTION_ID,
-          [Query.equal("listing_id", lid), Query.limit(1000)]
-        );
+        bidsRes = await databases.listDocuments(DB_ID, BIDS_COLLECTION_ID, [
+          Query.equal("listing_id", lid),
+          Query.limit(1000),
+        ]);
       } catch (err) {
         console.error(
           `Failed to list bids for listing ${lid}. Check BIDS indexes/attributes.`,
@@ -356,7 +364,7 @@ const queuedRes = await databases.listDocuments(
           { idempotencyKey }
         );
 
-        // 🔹 NEW: update the plate document with sale info
+        // 🔹 Update the plate document with sale info
         try {
           const commissionRate = getNumeric(listing.commission_rate); // e.g. 10 = 10%
           const soldPrice = finalBidAmount;
@@ -365,9 +373,7 @@ const queuedRes = await databases.listDocuments(
           const sellerNetAmount = soldPrice - saleFee;
 
           const buyerId =
-            listing.buyer_id ||
-            listing.highest_bidder ||
-            null;
+            listing.buyer_id || listing.highest_bidder || null;
 
           await databases.updateDocument(DB_ID, PLATES_COLLECTION_ID, lid, {
             buyer_email: winnerEmail,

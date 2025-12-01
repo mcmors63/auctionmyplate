@@ -95,7 +95,7 @@ export default function Navbar() {
             <span className="hidden sm:inline text-white">.co.uk</span>
           </span>
           <span className="hidden sm:block text-[11px] text-gray-400 tracking-[0.18em] uppercase">
-            DVLA-Style Number Plate Auctions
+            The UK's Number 1 Cherished Numberplate Auction
           </span>
         </div>
       </Link>

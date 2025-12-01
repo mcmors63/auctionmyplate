@@ -231,9 +231,9 @@ export default function PlaceBidPage() {
   const buyNowPrice =
     typeof rawBuyNow === "number" && rawBuyNow > 0 ? rawBuyNow : null;
 
-  const isLive = listing.status === "live";
-  const isComing = listing.status === "queued";
-  const isSold = listing.status === "sold";
+  const isLiveStatus = listing.status === "live";
+  const isComingStatus = listing.status === "queued";
+  const isSoldStatus = listing.status === "sold";
 
   const displayId =
     listing.listing_id || `AMP-${listing.$id.slice(-6).toUpperCase()}`;
@@ -249,10 +249,13 @@ export default function PlaceBidPage() {
       : false;
 
   // Treat SOLD as ended as well
-  const auctionEnded = auctionEndedTime || isSold;
+  const auctionEnded = auctionEndedTime || isSoldStatus;
+
+  // SOLD for UI when status is sold OR auction ended and reserve met
+  const isSoldForDisplay = isSoldStatus || (auctionEnded && reserveMet);
 
   // Only allow bidding / buy now when status is live AND end time is in future
-  const canBidOrBuyNow = isLive && !auctionEnded;
+  const canBidOrBuyNow = isLiveStatus && !auctionEnded;
 
   // ✅ Buy Now should ONLY show while current price is below Buy Now
   const canShowBuyNow =
@@ -264,14 +267,20 @@ export default function PlaceBidPage() {
   let timerLabel: string;
   if (auctionEnded) {
     timerLabel = "AUCTION ENDED";
-  } else if (isLive) {
+  } else if (isLiveStatus) {
     timerLabel = "AUCTION ENDS IN";
   } else {
     timerLabel = "AUCTION STARTS IN";
   }
 
   const timerStatus: "queued" | "live" | "ended" =
-    auctionEnded ? "ended" : isLive ? "live" : isComing ? "queued" : "ended";
+    auctionEnded
+      ? "ended"
+      : isLiveStatus
+      ? "live"
+      : isComingStatus
+      ? "queued"
+      : "ended";
 
   const paymentBlocked =
     loggedIn &&
@@ -493,7 +502,7 @@ export default function PlaceBidPage() {
 
             <div className="mt-2">
               <p className="uppercase tracking-[0.18em] text-[10px] text-gray-400">
-                Current bid
+                {isSoldForDisplay ? "Winning bid" : "Current bid"}
               </p>
               <p className="text-sm font-semibold">
                 £{effectiveBaseBid.toLocaleString()}
@@ -507,25 +516,25 @@ export default function PlaceBidPage() {
       <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
         {/* Status pills */}
         <div className="flex justify-end gap-2">
-          {isSold && (
-            <span className="px-4 py-1 bg-green-600 text-white rounded-full font-bold text-sm">
+          {isSoldForDisplay && (
+            <span className="px-4 py-1 bg-red-700 text-white rounded-full font-bold text-sm">
               SOLD
             </span>
           )}
 
-          {!isSold && canBidOrBuyNow && (
+          {!isSoldForDisplay && canBidOrBuyNow && (
             <span className="px-4 py-1 bg-[#FFD500] border border-black rounded-full font-bold text-sm">
               LIVE
             </span>
           )}
 
-          {!isSold && isComing && !auctionEnded && (
+          {!isSoldForDisplay && isComingStatus && !auctionEnded && (
             <span className="px-4 py-1 bg-gray-200 text-gray-700 rounded-full font-bold text-sm">
               Queued
             </span>
           )}
 
-          {!isSold && auctionEnded && (
+          {!isSoldForDisplay && auctionEnded && (
             <span className="px-4 py-1 bg-gray-300 text-gray-800 rounded-full font-bold text-sm">
               ENDED
             </span>
@@ -537,11 +546,15 @@ export default function PlaceBidPage() {
           <p className="text-xs text-gray-500 uppercase">Listing ID</p>
           <p className="font-bold text-lg">{displayId}</p>
 
-          <h2 className="text-4xl font-extrabold text-green-700 mt-4">
+          <h2
+            className={`text-4xl font-extrabold mt-4 ${
+              isSoldForDisplay ? "text-red-700" : "text-green-700"
+            }`}
+          >
             £{effectiveBaseBid.toLocaleString()}
           </h2>
           <p className="text-gray-700">
-            {isSold ? "Final Price" : "Current Bid"}
+            {isSoldForDisplay ? "Winning bid" : "Current Bid"}
           </p>
 
           <p className="mt-4 font-semibold text-lg">
@@ -642,7 +655,7 @@ export default function PlaceBidPage() {
             // AUCTION ENDED / SOLD
             <div className="mt-4 border border-red-300 bg-red-50 rounded-lg p-4 space-y-2">
               <p className="font-semibold text-red-800">
-                {isSold
+                {isSoldForDisplay
                   ? "This plate has been sold."
                   : "Auction has already ended."}
               </p>

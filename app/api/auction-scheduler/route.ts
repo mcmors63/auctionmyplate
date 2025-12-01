@@ -137,18 +137,17 @@ export async function GET() {
     const now = new Date();
     const nowIso = now.toISOString();
 
-    // ---------------------------------
-    // 1) Promote queued -> live
-    // ---------------------------------
-    const queuedRes = await databases.listDocuments(
-      DB_ID,
-      PLATES_COLLECTION_ID,
-      [
-        Query.equal("status", "queued"),
-        Query.lessThanEqual("auction_start", nowIso),
-        Query.limit(100),
-      ]
-    );
+   // 1) Promote queued -> live
+const queuedRes = await databases.listDocuments(
+  DB_ID,
+  PLATES_COLLECTION_ID,
+  [
+    // handle both "queued" and the old "approvedQueued" if any still exist
+    Query.equal("status", ["queued", "approvedQueued"]),
+    Query.lessThanEqual("auction_start", nowIso),
+    Query.limit(200),
+  ]
+);
 
     let promoted = 0;
     for (const doc of queuedRes.documents as any[]) {

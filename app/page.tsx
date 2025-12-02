@@ -1,7 +1,5 @@
 // app/page.tsx
 
-// app/page.tsx
-
 export const metadata = {
   title: "Auction Your Private Number Plate | AuctionMyPlate",
   description:
@@ -28,9 +26,9 @@ export default function HomePage() {
           </h1>
 
           <p className="text-xl max-w-2xl text-gray-300 mb-8 leading-relaxed">
-            Weekly DVLA-style auctions run from{" "}
-            <span className="text-gold font-semibold">Monday 01:00</span> to{" "}
-            <span className="text-gold font-semibold">Sunday 23:00</span>.  
+            Weekly auctions run from{" "}
+            <span className="text-gold font-semibold">Monday</span> to{" "}
+            <span className="text-gold font-semibold">Sunday</span>.{" "}
             Bid on cherished plates or sell yours for the best price.
           </p>
 
@@ -61,7 +59,7 @@ export default function HomePage() {
             <div className="text-4xl mb-4">💷</div>
             <h3 className="text-2xl font-bold text-gold mb-3">SELL</h3>
             <p className="text-gray-400">
-              Listing your plate is completely free.  
+              Listing your plate is completely free.{"  "}
               Fast approvals and maximum exposure to serious buyers.
             </p>
           </div>
@@ -69,9 +67,12 @@ export default function HomePage() {
           {/* SAFE */}
           <div className="bg-black/40 p-8 rounded-2xl border border-gold/20 shadow-xl text-center">
             <div className="text-4xl mb-4">🔒</div>
-            <h3 className="text-2xl font-bold text-gold mb-3">SAFE &amp; SECURE</h3>
+            <h3 className="text-2xl font-bold text-gold mb-3">
+              SAFE &amp; SECURE
+            </h3>
             <p className="text-gray-400">
-              Verified users, transparent fees and DVLA-style transfer guidance on every sale.
+              Verified users, transparent fees and DVLA-style transfer guidance
+              on every sale.
             </p>
           </div>
 
@@ -80,7 +81,8 @@ export default function HomePage() {
             <div className="text-4xl mb-4">🛒</div>
             <h3 className="text-2xl font-bold text-gold mb-3">BUY</h3>
             <p className="text-gray-400">
-              Bid in weekly auctions on unique registrations, from clever wordplay to ultra-rare plates.
+              Bid in weekly auctions on unique registrations, from clever
+              wordplay to ultra-rare plates.
             </p>
           </div>
         </div>
@@ -99,7 +101,8 @@ export default function HomePage() {
               List Your Plate
             </h3>
             <p className="text-gray-400">
-              Create an account, add your plate details and submit for approval. Listing is free.
+              Create an account, add your plate details and submit for approval.
+              Listing is free.
             </p>
           </div>
 
@@ -109,7 +112,8 @@ export default function HomePage() {
               Auction Goes Live
             </h3>
             <p className="text-gray-400">
-              Once approved, your plate enters the next Monday–Sunday auction window.
+              Once approved, your plate enters the next Monday–Sunday auction
+              window.
             </p>
           </div>
 
@@ -119,7 +123,8 @@ export default function HomePage() {
               Secure Transfer
             </h3>
             <p className="text-gray-400">
-              When it sells, we guide both buyer and seller through a safe DVLA-style transfer.
+              When it sells, we guide both buyer and seller through a safe
+              DVLA-style transfer.
             </p>
           </div>
         </div>
@@ -132,7 +137,7 @@ export default function HomePage() {
             Why Choose AuctionMyPlate?
           </h2>
           <p className="text-gray-300 text-lg">
-            Built for plate lovers, collectors, traders and investors.  
+            Built for plate lovers, collectors, traders and investors.{"  "}
             Modern, transparent and secure — with{" "}
             <span className="text-gold font-semibold">no listing fees</span>{" "}
             and a weekly auction cycle designed around UK number plate buyers.

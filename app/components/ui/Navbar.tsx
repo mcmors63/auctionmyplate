@@ -1,9 +1,9 @@
 // app/components/ui/Navbar.tsx
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Client, Account } from "appwrite";
 
 const client = new Client()
@@ -12,189 +12,212 @@ const client = new Client()
 
 const account = new Account(client);
 
+type User = {
+  $id: string;
+  email: string;
+  name?: string;
+};
+
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [user, setUser] = useState<any>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
+  // -----------------------------
+  // Load current session
+  // -----------------------------
   useEffect(() => {
-    const loadUser = async () => {
+    let alive = true;
+
+    const load = async () => {
       try {
         const current = await account.get();
-        setUser(current);
-
-        // Cache email locally so we can still show "Hi [name]" if session expires
-        if (
-          typeof window !== "undefined" &&
-          current?.email &&
-          !window.localStorage.getItem("amp_user_email")
-        ) {
-          window.localStorage.setItem("amp_user_email", current.email);
-        }
-      } catch (err) {
-        // No active Appwrite session – fall back to any cached email if present
-        if (typeof window !== "undefined") {
-          const storedEmail = window.localStorage.getItem("amp_user_email");
-          if (storedEmail) {
-            setUser({ email: storedEmail });
-          } else {
-            setUser(null);
-          }
-        } else {
-          setUser(null);
-        }
+        if (!alive) return;
+        setUser(current as User);
+      } catch {
+        if (!alive) return;
+        setUser(null);
       } finally {
-        setLoaded(true);
+        if (!alive) return;
+        setLoadingUser(false);
       }
     };
 
-    loadUser();
-  }, [pathname]);
-
-  // --------------------------------------------------------
-  // LOGOUT
-  // --------------------------------------------------------
-  const handleLogout = async () => {
-    try {
-      await account.deleteSession("current");
-    } catch (err) {
-      // Common case if session has already expired:
-      // "User (role: guests) missing scopes (['account'])"
-      console.warn(
-        "Logout: no active Appwrite session, treating as logged out.",
-        err
-      );
-    } finally {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("amp_user_email");
-        window.localStorage.removeItem("amp_user_name");
-      }
-      router.push("/login-or-register");
-    }
-  };
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const isAdmin = user?.email === "admin@auctionmyplate.co.uk";
 
-  // Common classes for all top nav links so they look consistent
-  const navLinkBase =
-    "text-xs sm:text-sm font-semibold px-3 py-1 rounded transition-colors";
-  const navLinkDefault =
-    navLinkBase +
-    " text-white hover:text-yellow-300 hover:bg-yellow-500/10";
+  const handleLogout = async () => {
+    try {
+      await account.deleteSession("current");
+    } catch {
+      // ignore
+    }
+    setUser(null);
+    router.push("/");
+  };
+
+  // Main nav links
+  const navLinks = [
+    { href: "/", label: "Home" },
+    { href: "/about", label: "About" },
+    { href: "/fees", label: "Fees" },
+    { href: "/how-it-works", label: "How It Works" },
+    { href: "/current-listings", label: "Current Listings" },
+    { href: "/sell-my-plate", label: "Sell My Plate" },
+    // ✅ FIXED: point to your existing /dvla page
+    { href: "/dvla", label: "DVLA Guidelines" },
+    { href: "/faq", label: "FAQ" },
+  ];
+
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname?.startsWith(href);
+  };
 
   return (
-    <nav className="bg-black text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shadow-lg">
-      {/* LOGO / BRAND */}
-      <Link href="/" className="flex items-center gap-2">
-        <div className="flex flex-col leading-tight">
-          <span className="text-lg sm:text-xl font-extrabold tracking-tight">
+    <header className="sticky top-0 z-40 bg-black/95 backdrop-blur border-b border-yellow-600/40">
+      <nav className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3 md:py-4">
+        {/* LOGO */}
+        <Link href="/" className="flex items-center gap-2">
+          <span className="text-lg md:text-xl font-extrabold text-white tracking-tight">
             <span className="text-white">AuctionMy</span>
-            <span className="text-yellow-400">Plate</span>
-            <span className="hidden sm:inline text-white">.co.uk</span>
+            <span className="text-yellow-400">Plate.co.uk</span>
           </span>
-          <span className="hidden sm:block text-[11px] text-gray-400 tracking-[0.18em] uppercase">
-            The UK's Number 1 Cherished Numberplate Auction
-          </span>
+        </Link>
+
+        {/* DESKTOP NAV LINKS */}
+        <div className="hidden md:flex items-center space-x-6">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`text-sm font-medium transition-colors ${
+                isActive(link.href)
+                  ? "text-yellow-300"
+                  : "text-gray-200 hover:text-yellow-300"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
-      </Link>
 
-      {/* NAV LINKS */}
-      <div className="flex flex-wrap gap-2 sm:gap-4 items-center text-sm justify-end">
-        {/* Left / main section */}
-        <Link href="/" className={navLinkDefault}>
-          Home
-        </Link>
-        <Link href="/about" className={navLinkDefault}>
-          About
-        </Link>
-        <Link href="/fees" className={navLinkDefault}>
-          Fees
-        </Link>
-        <Link href="/current-listings" className={navLinkDefault}>
-          Current Listings
-        </Link>
-        <Link href="/sell-my-plate" className={navLinkDefault}>
-          Sell My Plate
-        </Link>
-        <Link href="/dvla" className={navLinkDefault}>
-          DVLA Guidelines
-        </Link>
-        {/* ✅ New FAQ link */}
-        <Link href="/faq" className={navLinkDefault}>
-          FAQ
-        </Link>
-
-        {/* ADMIN LINK – ONLY WHEN ADMIN LOGGED IN */}
-        {loaded && isAdmin && (
-          <Link
-            href="/admin"
-            className={
-              navLinkBase +
-              " text-yellow-300 underline hover:text-yellow-200"
-            }
-          >
-            Admin
-          </Link>
-        )}
-
-        {/* LOGGED OUT – Login/Register */}
-        {loaded && !user && (
-          <>
-            <Link
-              href="/login"
-              className={
-                navLinkBase +
-                " border border-yellow-500 text-yellow-300 hover:bg-yellow-500/10"
-              }
-            >
-              Login
-            </Link>
-
-            <Link
-              href="/register"
-              className={
-                navLinkBase +
-                " border border-yellow-500 text-yellow-300 hover:bg-yellow-500/10"
-              }
-            >
-              Register
-            </Link>
-          </>
-        )}
-
-        {/* LOGGED IN – Normal user or Admin */}
-        {loaded && user && (
-          <>
-            {!isAdmin && (
+        {/* DESKTOP AUTH BUTTONS */}
+        <div className="hidden md:flex items-center space-x-3">
+          {loadingUser ? null : user ? (
+            <>
               <Link
-                href="/dashboard"
-                className={navLinkDefault + " font-bold"}
+                href={isAdmin ? "/admin" : "/dashboard"}
+                className="px-4 py-2 text-sm font-semibold rounded-md border border-yellow-400 text-yellow-300 hover:bg-yellow-400 hover:text-black transition"
               >
-                Dashboard
+                {isAdmin ? "Admin" : "My Dashboard"}
               </Link>
-            )}
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 transition"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="px-4 py-2 text-sm font-semibold rounded-md border border-yellow-400 text-yellow-300 hover:bg-yellow-400 hover:text-black transition"
+              >
+                Login
+              </Link>
+              <Link
+                href="/register"
+                className="px-4 py-2 text-sm font-semibold rounded-md bg-yellow-400 text-black hover:bg-yellow-300 transition"
+              >
+                Register
+              </Link>
+            </>
+          )}
+        </div>
 
-            <span className="hidden sm:inline text-[11px] text-yellow-300">
-              Hi{" "}
-              <strong>
-                {user.name || (user.email ? user.email.split("@")[0] : "")}
-              </strong>
-            </span>
+        {/* MOBILE TOGGLE */}
+        <button
+          className="md:hidden flex items-center justify-center w-9 h-9 border border-yellow-500 rounded-md text-yellow-300"
+          onClick={() => setMobileOpen((o) => !o)}
+          aria-label="Toggle menu"
+        >
+          {mobileOpen ? "✕" : "☰"}
+        </button>
+      </nav>
 
-            <button
-              onClick={handleLogout}
-              className={
-                navLinkBase +
-                " bg-yellow-400 text-black hover:bg-yellow-500"
-              }
-            >
-              Logout
-            </button>
-          </>
-        )}
-      </div>
-    </nav>
+      {/* MOBILE MENU */}
+      {mobileOpen && (
+        <div className="md:hidden border-t border-yellow-600/40 bg-black/98">
+          <div className="max-w-6xl mx-auto px-4 py-3 space-y-3">
+            <div className="flex flex-col space-y-2">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`text-sm font-medium py-1 ${
+                    isActive(link.href)
+                      ? "text-yellow-300"
+                      : "text-gray-200 hover:text-yellow-300"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="border-t border-yellow-700/40 pt-3 mt-2 flex flex-col space-y-2">
+              {loadingUser ? null : user ? (
+                <>
+                  <Link
+                    href={isAdmin ? "/admin" : "/dashboard"}
+                    onClick={() => setMobileOpen(false)}
+                    className="w-full text-center px-4 py-2 text-sm font-semibold rounded-md border border-yellow-400 text-yellow-300 hover:bg-yellow-400 hover:text-black transition"
+                  >
+                    {isAdmin ? "Admin" : "My Dashboard"}
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setMobileOpen(false);
+                      void handleLogout();
+                    }}
+                    className="w-full px-4 py-2 text-sm font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 transition"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="w-full text-center px-4 py-2 text-sm font-semibold rounded-md border border-yellow-400 text-yellow-300 hover:bg-yellow-400 hover:text-black transition"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    href="/register"
+                    onClick={() => setMobileOpen(false)}
+                    className="w-full text-center px-4 py-2 text-sm font-semibold rounded-md bg-yellow-400 text-black hover:bg-yellow-300 transition"
+                  >
+                    Register
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </header>
   );
 }

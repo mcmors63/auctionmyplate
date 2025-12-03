@@ -2200,17 +2200,33 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* TRANSACTIONS TAB */}
+                {/* TRANSACTIONS TAB */}
         {activeTab === "transactions" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold mb-2 text-yellow-700">
               Transactions &amp; Documents
             </h2>
             <p className="text-sm text-gray-600 mb-2">
-              Active sales and purchases where payment and DVLA transfer are
-              still in progress. You&apos;ll see document upload options here
-              when admin has requested information from you.
+              Active sales and purchases where payment and DVLA transfer are still in progress.
+              You&apos;ll see document upload options here when admin has requested information
+              from you.
             </p>
+
+            {/* Small summary */}
+            <div className="flex flex-wrap gap-3 text-xs text-gray-700 mb-2">
+              <span className="px-3 py-1 rounded-full bg-yellow-50 border border-yellow-200">
+                As seller:{" "}
+                <strong>
+                  {activeTransactions.filter((t) => t.seller_email === userEmail).length}
+                </strong>
+              </span>
+              <span className="px-3 py-1 rounded-full bg-yellow-50 border border-yellow-200">
+                As buyer:{" "}
+                <strong>
+                  {activeTransactions.filter((t) => t.buyer_email === userEmail).length}
+                </strong>
+              </span>
+            </div>
 
             {activeTransactions.length === 0 ? (
               <p className="text-gray-600 text-sm text-center">
@@ -2255,7 +2271,6 @@ export default function DashboardPage() {
                   const isSeller = tx.seller_email === user?.email;
                   const isBuyer = tx.buyer_email === user?.email;
 
-                  // When should we show the document uploader?
                   const needsSellerDocs =
                     isSeller &&
                     !!tx.seller_docs_requested &&
@@ -2268,6 +2283,13 @@ export default function DashboardPage() {
 
                   const showUploader =
                     !!profile && (needsSellerDocs || needsBuyerDocs);
+
+                  const salePrice = tx.sale_price ?? 0;
+                  const dvlaFee = tx.dvla_fee ?? 0;
+                  const sellerPayout = tx.seller_payout ?? 0;
+                  const commissionAmount = tx.commission_amount ?? 0;
+                  const txCommissionRate = tx.commission_rate ?? 0;
+                  const totalPaid = salePrice + dvlaFee;
 
                   return (
                     <div
@@ -2313,24 +2335,39 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
-                      {/* SUMMARY BOX */}
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700">
+                      {/* SUMMARY BOX – per transaction */}
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700 mt-2 space-y-1">
                         <p>
-                          Listing fee:{" "}
-                          <strong>£{listingFee.toFixed(2)}</strong>
+                          <strong>Sale price:</strong> £{salePrice.toFixed(2)}
                         </p>
                         <p>
-                          Commission:{" "}
-                          <strong>{commissionRate.toFixed(1)}%</strong>
+                          <strong>DVLA fee:</strong> £{dvlaFee.toFixed(2)}
                         </p>
+
+                        {isSeller && (
+                          <>
+                            <p>
+                              <strong>Commission:</strong> £
+                              {commissionAmount.toFixed(2)} (
+                              {txCommissionRate}%)
+                            </p>
+                            <p>
+                              <strong>Estimated payout to you:</strong> £
+                              {sellerPayout.toFixed(2)}
+                            </p>
+                          </>
+                        )}
+
+                        {isBuyer && (
+                          <p>
+                            <strong>Total paid (approx):</strong> £
+                            {totalPaid.toFixed(2)}
+                          </p>
+                        )}
+
                         <p>
-                          Expected return:{" "}
-                          <strong>
-                            £
-                            {expectedReturn > 0
-                              ? expectedReturn.toFixed(2)
-                              : "0.00"}
-                          </strong>
+                          <strong>Payment status:</strong>{" "}
+                          {tx.payment_status || "pending"}
                         </p>
                       </div>
 

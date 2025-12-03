@@ -1,7 +1,7 @@
 // app/login/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Client, Account } from "appwrite";
@@ -127,9 +127,7 @@ export default function LoginPage() {
     try {
       setSubmitting(true);
 
-      // 🔑 Appwrite v11+ uses createEmailPasswordSession
-      //    Older versions used createEmailSession – that one
-      //    does NOT exist in your current SDK (hence the error).
+      // ✅ Correct for Appwrite v11+
       await account.createEmailPasswordSession(email, password);
 
       // ✅ Success: clear attempts and redirect
@@ -143,6 +141,10 @@ export default function LoginPage() {
 
       if (msg.includes("invalid credentials") || msg.includes("invalid email")) {
         recordFailedAttempt();
+      } else if (msg.includes("email not verified")) {
+        setError(
+          "Your email is not verified yet. Please check your inbox for the verification link."
+        );
       } else {
         setError(err?.message || "Login failed. Please try again.");
       }

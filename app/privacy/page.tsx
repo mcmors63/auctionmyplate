@@ -1,9 +1,19 @@
 // app/privacy/page.tsx
 
-export const metadata = {
+import type { Metadata } from "next";
+import Link from "next/link";
+
+export const metadata: Metadata = {
   title: "Privacy Policy | AuctionMyPlate",
   description:
-    "How AuctionMyPlate.co.uk collects, uses and protects your personal data.",
+    "How AuctionMyPlate.co.uk collects, uses and protects your personal data when you register, list number plates or place bids.",
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: "/privacy",
+  },
 };
 
 export default function PrivacyPage() {
@@ -18,11 +28,30 @@ export default function PrivacyPage() {
           Effective Date: <strong>February 2025</strong>
         </p>
 
-        <p className="text-sm text-gray-700 mb-6">
-          This Privacy Policy explains how AuctionMyPlate.co.uk (“we”, “us”,
-          “our”) collects, uses, stores and protects your personal data when
+        <p className="text-sm text-gray-700 mb-4">
+          This Privacy Policy explains how{" "}
+          <span className="font-semibold">AuctionMyPlate.co.uk</span> (&quot;we&quot;, &quot;us&quot;,
+          &quot;our&quot;) collects, uses, stores and protects your personal data when
           you use our website, register for an account, list a plate, or bid in
           an auction.
+        </p>
+
+        <p className="text-sm text-gray-700 mb-6">
+          This Policy should be read together with our{" "}
+          <Link
+            href="/cookies"
+            className="text-yellow-700 underline font-semibold"
+          >
+            Cookie Policy
+          </Link>{" "}
+          and{" "}
+          <Link
+            href="/terms"
+            className="text-yellow-700 underline font-semibold"
+          >
+            Terms &amp; Conditions
+          </Link>
+          .
         </p>
 
         <div className="space-y-6 text-sm text-gray-800 leading-relaxed">
@@ -99,7 +128,7 @@ export default function PrivacyPage() {
                 sales, documents and support requests.
               </li>
               <li>
-                To prevent fraud, protect the platform and enforce our Terms &
+                To prevent fraud, protect the platform and enforce our Terms &amp;
                 Conditions.
               </li>
               <li>
@@ -155,12 +184,12 @@ export default function PrivacyPage() {
             <p className="mt-2">
               For more detail about exactly what cookies we use and how to
               manage them, please read our{" "}
-              <a
+              <Link
                 href="/cookies"
                 className="text-yellow-700 underline hover:text-yellow-800"
               >
                 Cookie Policy
-              </a>
+              </Link>
               .
             </p>
           </section>
@@ -221,9 +250,9 @@ export default function PrivacyPage() {
             </h2>
             <p>
               We use reasonable technical and organisational measures to protect
-              your personal data against unauthorised access, loss or misuse.
-              No system is 100% secure, but we work to keep your information
-              safe and review our safeguards regularly.
+              your personal data against unauthorised access, loss or misuse. No
+              system is 100% secure, but we work to keep your information safe
+              and review our safeguards regularly.
             </p>
           </section>
 
@@ -259,11 +288,17 @@ export default function PrivacyPage() {
             </h2>
             <p>
               We may update this Privacy Policy from time to time. When we do,
-              we will update the “Effective Date” at the top of the page. Your
-              continued use of the site after any changes means you accept the
-              updated policy.
+              we will update the &quot;Effective Date&quot; at the top of the
+              page. Your continued use of the site after any changes means you
+              accept the updated policy.
             </p>
           </section>
+        </div>
+
+        <div className="mt-8 text-sm">
+          <Link href="/" className="text-yellow-700 underline">
+            &larr; Back to home
+          </Link>
         </div>
       </div>
     </main>

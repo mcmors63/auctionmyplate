@@ -276,27 +276,33 @@ export default function ListingCard({ listing }: Props) {
 
       {/* FOOTER BUTTONS */}
       <div className="flex justify-between items-center pt-1">
-        <Link
-          href={`/place_bid?id=${$id}`}
-          className="text-blue-600 underline text-[12px]"
-        >
-          View
-        </Link>
-
         {canBid ? (
-          <Link
-            href={`/place_bid?id=${$id}`}
-            className="bg-gold text-black px-3 py-1.5 rounded-md font-bold text-[12px] shadow-sm hover:bg-yellow-400 transition"
-          >
-            Bid
-          </Link>
+          <>
+            {/* Small text link + big Bid button when live */}
+            <Link
+              href={`/place_bid?id=${$id}`}
+              className="text-blue-600 underline text-[12px]"
+            >
+              View
+            </Link>
+
+            <Link
+              href={`/place_bid?id=${$id}`}
+              className="bg-gold text-black px-3 py-1.5 rounded-md font-bold text-[12px] shadow-sm hover:bg-yellow-400 transition"
+            >
+              Bid
+            </Link>
+          </>
         ) : (
-          <Link
-            href={`/place_bid?id=${$id}`}
-            className="bg-gray-200 text-gray-800 px-3 py-1.5 rounded-md font-bold text-[12px] shadow-sm hover:bg-gray-300 transition"
-          >
-            View
-          </Link>
+          <>
+            {/* Single View button when you can't bid */}
+            <Link
+              href={`/place_bid?id=${$id}`}
+              className="ml-auto bg-gray-200 text-gray-800 px-3 py-1.5 rounded-md font-bold text-[12px] shadow-sm hover:bg-gray-300 transition"
+            >
+              View
+            </Link>
+          </>
         )}
       </div>
     </div>

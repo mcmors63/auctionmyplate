@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const listingId = body.listingId as string | undefined;
     const buyerEmail = body.userEmail as string | undefined;
-    const buyerId = body.userId as string | undefined;
+    const buyerId = body.userId as string | undefined; // not used yet, but kept for future
     const paymentIntentId = body.paymentIntentId as string | undefined;
     const totalChargedRaw = body.totalCharged;
 
@@ -167,8 +167,7 @@ export async function POST(req: NextRequest) {
         stripe_payment_intent_id: paymentIntentId || null,
         created_at: nowIso,
         updated_at: nowIso,
-        // flags fields are safe if they exist in your Transactions collection;
-        // if not, Appwrite will just ignore missing attributes as long as they are defined.
+        // flags – we’re already expecting docs from both sides here
         seller_docs_requested: true,
         seller_docs_received: false,
         seller_payment_transferred: false,
@@ -178,10 +177,11 @@ export async function POST(req: NextRequest) {
         buyer_tax_mot_validated: false,
         buyer_payment_taken: true,
         buyer_transfer_complete: false,
+        documents: [],
       }
     );
 
-    // 4) Mark plate as sold (NO buyer_id!)
+    // 4) Mark plate as sold (NO buyer_id! Only email + sale info.)
     await databases.updateDocument(DB_ID, PLATES_COLLECTION_ID, listing.$id, {
       status: "sold",
       sold_price: salePrice,
@@ -214,7 +214,9 @@ export async function POST(req: NextRequest) {
       const buyerDashboardUrl = `${siteUrl}/dashboard?tab=purchases`;
       const adminTxUrl = `${siteUrl}/admin?tab=transactions`;
 
-      // Admin email
+      // -----------------------------
+      // Admin summary email
+      // -----------------------------
       try {
         await transporter.sendMail({
           from: `"AuctionMyPlate" <${smtpUser}>`,
@@ -240,35 +242,16 @@ Admin dashboard: ${adminTxUrl}
         console.error("[buy-now] Failed to send admin email:", err);
       }
 
-      // Buyer email
-      try {
-        await transporter.sendMail({
-          from: `"AuctionMyPlate" <${smtpUser}>`,
-          to: buyerEmail,
-          subject: `You’ve bought ${reg} via Buy Now`,
-          text: `Thank you for your purchase.
+      // -----------------------------
+      // SELLER EMAILS (2)
+      // -----------------------------
 
-You’ve successfully bought registration ${reg} on AuctionMyPlate for ${prettySale}.
-A DVLA paperwork fee of ${prettyDvla} has also been charged.
-
-We’ll now contact you to collect the details needed to complete the DVLA transfer.
-
-You can track this purchase in your dashboard:
-${buyerDashboardUrl}
-
-Thank you for using AuctionMyPlate.co.uk.
-`,
-        });
-      } catch (err) {
-        console.error("[buy-now] Failed to send buyer email:", err);
-      }
-
-      // Seller email
+      // 1) Seller celebration email
       try {
         await transporter.sendMail({
           from: `"AuctionMyPlate" <${smtpUser}>`,
           to: sellerEmail,
-          subject: `Your plate ${reg} has sold via Buy Now`,
+          subject: `🎉 Your plate ${reg} has sold via Buy Now`,
           text: `Good news!
 
 Your registration ${reg} has been sold via Buy Now on AuctionMyPlate for ${prettySale}.
@@ -279,14 +262,112 @@ Amount due to you (subject to successful transfer): ${prettyPayout}
 
 We’ll process the DVLA transfer and release funds to you once the transfer is complete and all documents are received.
 
-You can upload your documents and track this sale in your dashboard:
+You can track this sale in your dashboard:
 ${sellerDashboardUrl}
 
 Thank you for using AuctionMyPlate.co.uk.
 `,
         });
       } catch (err) {
-        console.error("[buy-now] Failed to send seller email:", err);
+        console.error("[buy-now] Failed to send seller celebration email:", err);
+      }
+
+      // 2) Seller documents-request email
+      try {
+        await transporter.sendMail({
+          from: `"AuctionMyPlate" <${smtpUser}>`,
+          to: sellerEmail,
+          subject: `📄 Action needed: documents for ${reg}`,
+          html: `
+            <p>To complete the sale of <strong>${reg}</strong>, we now need your DVLA paperwork.</p>
+            <p>This may include your <strong>V5C/logbook</strong> or <strong>retention certificate</strong>, depending on how the plate is currently held.</p>
+
+            <p><strong>Please log in and upload your documents:</strong></p>
+            <ol>
+              <li>Go to <a href="${sellerDashboardUrl}" target="_blank" rel="noopener noreferrer">${sellerDashboardUrl}</a></li>
+              <li>Open <strong>My Dashboard → Transactions</strong>.</li>
+              <li>Select the transaction for <strong>${reg}</strong>.</li>
+              <li>Use the <strong>Upload Supporting Documents</strong> section to upload clear photos or PDFs.</li>
+            </ol>
+
+            <p>Once we've reviewed your documents and the DVLA transfer has completed, we'll release your payout of approximately <strong>${prettyPayout}</strong>.</p>
+
+            <p>If anything is unclear, reply to this email or contact <a href="mailto:admin@auctionmyplate.co.uk">admin@auctionmyplate.co.uk</a>.</p>
+
+            <p>Thank you,<br />AuctionMyPlate.co.uk</p>
+          `,
+        });
+      } catch (err) {
+        console.error("[buy-now] Failed to send seller docs email:", err);
+      }
+
+      // -----------------------------
+      // BUYER EMAILS (2)
+      // -----------------------------
+
+      // 1) Buyer celebration email
+      try {
+        await transporter.sendMail({
+          from: `"AuctionMyPlate" <${smtpUser}>`,
+          to: buyerEmail,
+          subject: `You’ve bought ${reg} via Buy Now`,
+          text: `Thank you for your purchase.
+
+You’ve successfully bought registration ${reg} on AuctionMyPlate for ${prettySale}.
+A DVLA paperwork fee of ${prettyDvla} has also been charged.
+
+We’ll now guide you through the DVLA transfer so the registration can be correctly assigned to your vehicle.
+
+You can track this purchase in your dashboard:
+${buyerDashboardUrl}
+
+Thank you for using AuctionMyPlate.co.uk.
+`,
+        });
+      } catch (err) {
+        console.error("[buy-now] Failed to send buyer celebration email:", err);
+      }
+
+      // 2) Buyer documents / DVLA warning email
+      try {
+        await transporter.sendMail({
+          from: `"AuctionMyPlate" <${smtpUser}>`,
+          to: buyerEmail,
+          subject: `📄 Action needed: documents & vehicle details for ${reg}`,
+          html: `
+            <p>To complete your purchase of <strong>${reg}</strong>, we now need a few documents and details from you.</p>
+
+            <p><strong>Important DVLA note:</strong></p>
+            <p>
+              This registration must be assigned to a vehicle that is <strong>taxed</strong> and holds a 
+              <strong>current MOT (if required)</strong>. Once the plate is transferred onto a vehicle, 
+              the registered keeper becomes the legal owner and can then request a retention certificate.
+            </p>
+
+            <p><strong>What we typically need from you:</strong></p>
+            <ul>
+              <li>A clear photo or scan of the <strong>V5C (logbook)</strong> for the vehicle the plate will be assigned to.</li>
+              <li>A clear photo of your <strong>photocard driving licence</strong>.</li>
+              <li>Any additional proof we request in your AuctionMyPlate dashboard (for example, proof of address if needed).</li>
+            </ul>
+
+            <p><strong>How to upload your documents:</strong></p>
+            <ol>
+              <li>Go to <a href="${buyerDashboardUrl}" target="_blank" rel="noopener noreferrer">${buyerDashboardUrl}</a> and log in.</li>
+              <li>Open <strong>My Dashboard → Purchases / Transactions</strong>.</li>
+              <li>Find the transaction for <strong>${reg}</strong>.</li>
+              <li>Use the <strong>Upload documents</strong> section to upload each required file (photos or PDFs are fine).</li>
+            </ol>
+
+            <p>Once we’ve checked everything and confirmed your vehicle is eligible, we’ll complete the DVLA transfer and finalise your purchase.</p>
+
+            <p>If you’re unsure about anything, reply to this email or contact <a href="mailto:admin@auctionmyplate.co.uk">admin@auctionmyplate.co.uk</a>.</p>
+
+            <p>Thank you,<br />AuctionMyPlate.co.uk</p>
+          `,
+        });
+      } catch (err) {
+        console.error("[buy-now] Failed to send buyer docs email:", err);
       }
     }
 

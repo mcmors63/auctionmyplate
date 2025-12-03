@@ -12,6 +12,8 @@ import DvlaPlate from "./DvlaPlate";
 // Constants
 // ----------------------------------------------------
 const DVLA_FEE_GBP = 80; // £80 paperwork fee
+// Per-plate localStorage key prefix
+const VEHICLE_NOTICE_KEY_PREFIX = "amp_vehicle_warning_accepted_";
 
 // ----------------------------------------------------
 // Appwrite
@@ -92,6 +94,9 @@ export default function PlaceBidPage() {
     null
   );
 
+  // DVLA / MOT notice acceptance (per plate)
+  const [vehicleNoticeAccepted, setVehicleNoticeAccepted] = useState(false);
+
   // ----------------------------------------------------
   // LOGIN CHECK – localStorage first (navbar), then Appwrite
   // ----------------------------------------------------
@@ -104,28 +109,31 @@ export default function PlaceBidPage() {
           setLoggedIn(true);
           setUserEmail(storedEmail);
           if (storedId) setUserId(storedId);
-          return;
         }
       }
 
-      try {
-        const current = await account.get();
-        setLoggedIn(true);
-        setUserEmail(current.email);
-        setUserId(current.$id);
+      // If no local user yet, fall back to Appwrite session
+      if (!userEmail) {
+        try {
+          const current = await account.get();
+          setLoggedIn(true);
+          setUserEmail(current.email);
+          setUserId(current.$id);
 
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("amp_user_email", current.email);
-          window.localStorage.setItem("amp_user_id", current.$id);
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("amp_user_email", current.email);
+            window.localStorage.setItem("amp_user_id", current.$id);
+          }
+        } catch {
+          setLoggedIn(false);
+          setUserEmail(null);
+          setUserId(null);
         }
-      } catch {
-        setLoggedIn(false);
-        setUserEmail(null);
-        setUserId(null);
       }
     };
 
     checkLogin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ----------------------------------------------------
@@ -191,6 +199,21 @@ export default function PlaceBidPage() {
       .finally(() => setLoading(false));
   }, [listingId]);
 
+  // ----------------------------------------------------
+  // PER-PLATE DVLA NOTICE STATE
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!listing?.$id) return;
+
+    const key = `${VEHICLE_NOTICE_KEY_PREFIX}${listing.$id}`;
+    const stored = window.localStorage.getItem(key);
+    setVehicleNoticeAccepted(stored === "true");
+  }, [listing?.$id]);
+
+  // ----------------------------------------------------
+  // EARLY RETURNS (LOADING / NOT FOUND)
+  // ----------------------------------------------------
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5]">
@@ -300,6 +323,13 @@ export default function PlaceBidPage() {
       return;
     }
 
+    if (!vehicleNoticeAccepted) {
+      setError(
+        "Please confirm you have read the DVLA notice before placing a bid."
+      );
+      return;
+    }
+
     if (paymentBlocked) {
       setError("You must add a payment method before placing a bid.");
       return;
@@ -364,6 +394,13 @@ export default function PlaceBidPage() {
 
     if (!loggedIn || !userEmail) {
       setError("You must be logged in to use Buy Now.");
+      return;
+    }
+
+    if (!vehicleNoticeAccepted) {
+      setError(
+        "Please confirm you have read the DVLA notice before using Buy Now."
+      );
       return;
     }
 
@@ -593,6 +630,45 @@ export default function PlaceBidPage() {
             DVLA paperwork (auctionmyplate.co.uk has no affiliation with DVLA).
           </p>
 
+          {/* DVLA / MOT WARNING */}
+          <div className="mt-3 border border-yellow-400 bg-yellow-50 rounded-lg p-3 text-sm text-yellow-900">
+            <p className="font-semibold">Important notice</p>
+            <p className="mt-1">
+              Please be advised that this plate must go onto a vehicle which is{" "}
+              <strong>taxed</strong> and holds a{" "}
+              <strong>current MOT (if required)</strong>. Once the plate is
+              transferred onto a vehicle, the registered keeper will become the
+              legal owner and can then request a retention certificate.
+            </p>
+            {loggedIn && !vehicleNoticeAccepted && (
+              <label className="mt-2 flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={vehicleNoticeAccepted}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setVehicleNoticeAccepted(checked);
+
+                    if (typeof window !== "undefined" && listing?.$id) {
+                      const key = `${VEHICLE_NOTICE_KEY_PREFIX}${listing.$id}`;
+                      window.localStorage.setItem(
+                        key,
+                        checked ? "true" : "false"
+                      );
+                    }
+                  }}
+                />
+                <span>I understand and accept this notice.</span>
+              </label>
+            )}
+            {loggedIn && vehicleNoticeAccepted && (
+              <p className="mt-2 text-xs text-green-700 font-semibold">
+                Notice accepted for this plate. You won&apos;t be asked again
+                when bidding on this plate from this device.
+              </p>
+            )}
+          </div>
+
           {/* Payment method banners (only when logged in) */}
           {loggedIn && (
             <div className="space-y-2 mt-2">
@@ -706,8 +782,8 @@ export default function PlaceBidPage() {
                     canBidOrBuyNow &&
                     !paymentBlocked &&
                     !checkingPaymentMethod
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "bg-gray-400 cursor-not-allowed"
+                      ? "bg-blue-600 hover:bg-blue-700 text-white"
+                      : "bg-gray-400 cursor-not-allowed text-white"
                   }`}
                 >
                   {canBidOrBuyNow

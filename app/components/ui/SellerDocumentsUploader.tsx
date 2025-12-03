@@ -16,7 +16,6 @@ type SellerDocumentsUploaderProps = {
 const DOCUMENT_TYPES = [
   "Proof of Ownership (V5C / V750 / V778)",
   "Retention Certificate",
-  "Photo ID (Driving Licence / Passport)",
   "Other supporting document",
 ];
 

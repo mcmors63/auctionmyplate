@@ -577,67 +577,45 @@ export default function PlaceBidPage() {
         </Link>
       </div>
 
-      {/* CAR HERO + NUMBER PLATE – mobile friendly */}
-<div className="max-w-4xl mx-auto mb-6">
-  <div className="relative w-full max-w-3xl mx-auto rounded-xl overflow-hidden shadow-lg bg-black">
-    <div className="relative w-full aspect-[16/9]">
-      <Image
-        src="/car-rear.jpg"
-        alt={`Rear of car with registration ${listing.registration || ""}`}
-        width={1600}
-        height={1067}
-        className="w-full h-full object-cover"
-        priority
-      />
-
-      {/* DESKTOP / TABLET – plate over the car */}
-      <div
-        className="hidden md:block absolute left-1/2 -translate-x-1/2"
-        style={{ bottom: "29%" }}
-      >
-        <div
-          style={{
-            transform: "scale(0.42)",
-            transformOrigin: "center bottom",
-          }}
-        >
-          <NumberPlate
-            reg={listing.registration || ""}
-            size="large"
-            variant="rear"
-            showBlueBand={true}
+      {/* CAR HERO + NUMBER PLATE */}
+      <div className="max-w-4xl mx-auto mb-6">
+        <div className="relative w-full max-w-3xl mx-auto rounded-xl overflow-hidden shadow-lg bg-black">
+          <Image
+            src="/car-rear.jpg"
+            alt={`Rear of car with registration ${listing.registration || ""}`}
+            width={1600}
+            height={1067}
+            className="w-full h-auto block"
+            priority
           />
+
+          <div
+            className="absolute left-1/2 -translate-x-1/2"
+            style={{ bottom: "29%" }}
+          >
+            <div
+              style={{
+                transform: "scale(0.42)",
+                transformOrigin: "center bottom",
+              }}
+            >
+              <NumberPlate
+                reg={listing.registration || ""}
+                size="large"
+                variant="rear"
+                showBlueBand={true}
+              />
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
 
-  {/* MOBILE – plate below the car, not covering it */}
-  <div className="mt-4 flex justify-center md:hidden">
-    <div
-      style={{
-        transform: "scale(0.85)",
-        transformOrigin: "center",
-      }}
-    >
-      <NumberPlate
-        reg={listing.registration || ""}
-        size="large"
-        variant="rear"
-        showBlueBand={true}
-      />
-    </div>
-  </div>
-</div>
-
-
-                <div className="mt-3 flex justify-between text-sm text-gray-600">
+        <div className="mt-3 flex justify-between text-sm text-gray-600">
           <span>Listing ID: {displayId}</span>
         </div>
+      </div>
 
-        {/* MAIN PANEL */}
-        <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
-
+            {/* MAIN PANEL */}
+      <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
         {/* Header: registration + plate preview */}
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1 space-y-1">

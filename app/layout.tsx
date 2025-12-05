@@ -2,6 +2,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { Analytics } from "@vercel/analytics/react";
 
 // ✅ Existing imports
 import Navbar from "@/components/ui/Navbar";

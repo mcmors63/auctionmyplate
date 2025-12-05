@@ -5,14 +5,14 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Client, Databases, Account } from "appwrite";
 import Link from "next/link";
-import AdminAuctionTimer from "@/components/ui/AdminAuctionTimer";
+import Image from "next/image";
+import NumberPlate from "@/components/ui/NumberPlate";
 import DvlaPlate from "./DvlaPlate";
 
 // ----------------------------------------------------
 // Constants
 // ----------------------------------------------------
 const DVLA_FEE_GBP = 80; // £80 paperwork fee
-// Per-plate localStorage key prefix
 const VEHICLE_NOTICE_KEY_PREFIX = "amp_vehicle_warning_accepted_";
 
 // ----------------------------------------------------
@@ -42,7 +42,6 @@ type Listing = {
   bids?: number | null;
   reserve_price?: number | null;
 
-  // Support both old + new names just in case
   auction_start?: string | null;
   auction_end?: string | null;
   start_time?: string | null;
@@ -50,7 +49,76 @@ type Listing = {
 
   buy_now?: number | null;
   buy_now_price?: number | null;
+
+  description?: string;
+  interesting_fact?: string | null;
 };
+
+type TimerStatus = "queued" | "live" | "ended";
+
+// ----------------------------------------------------
+// SIMPLE LOCAL TIMER
+// ----------------------------------------------------
+function formatRemaining(ms: number) {
+  if (ms <= 0) return "00:00:00";
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / (24 * 3600));
+  const hours = Math.floor((totalSeconds % (24 * 3600)) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  }
+
+  return `${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function LocalAuctionTimer({
+  start,
+  end,
+  status,
+}: {
+  start: string | null;
+  end: string | null;
+  status: TimerStatus;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  let targetStr: string | null = null;
+
+  if (status === "queued") {
+    targetStr = start ?? null;
+  } else if (status === "live") {
+    targetStr = end ?? null;
+  }
+
+  if (!targetStr) {
+    return <span className="font-mono text-sm">—</span>;
+  }
+
+  const targetMs = Date.parse(targetStr);
+  if (!Number.isFinite(targetMs)) {
+    return <span className="font-mono text-sm">—</span>;
+  }
+
+  const diff = targetMs - now;
+  const label = diff <= 0 ? "00:00:00" : formatRemaining(diff);
+
+  return <span className="font-mono text-sm">{label}</span>;
+}
 
 // ----------------------------------------------------
 // BID INCREMENTS
@@ -85,20 +153,17 @@ export default function PlaceBidPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Stripe payment method state
   const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(
     null
   );
   const [checkingPaymentMethod, setCheckingPaymentMethod] = useState(false);
-  const [paymentMethodError, setPaymentMethodError] = useState<string | null>(
-    null
-  );
+  const [paymentMethodError, setPaymentMethodError] =
+    useState<string | null>(null);
 
-  // DVLA / MOT notice acceptance (per plate)
   const [vehicleNoticeAccepted, setVehicleNoticeAccepted] = useState(false);
 
   // ----------------------------------------------------
-  // LOGIN CHECK – localStorage first (navbar), then Appwrite
+  // LOGIN CHECK
   // ----------------------------------------------------
   useEffect(() => {
     const checkLogin = async () => {
@@ -112,7 +177,6 @@ export default function PlaceBidPage() {
         }
       }
 
-      // If no local user yet, fall back to Appwrite session
       if (!userEmail) {
         try {
           const current = await account.get();
@@ -132,7 +196,7 @@ export default function PlaceBidPage() {
       }
     };
 
-    checkLogin();
+    void checkLogin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -166,7 +230,8 @@ export default function PlaceBidPage() {
         setHasPaymentMethod(Boolean(data.hasPaymentMethod));
       } catch (err: any) {
         console.error("has-payment-method error:", err);
-        const msg = err?.message || "Could not verify your payment method.";
+        const msg =
+          err?.message || "Could not verify your payment method.";
 
         if (msg.includes("Stripe is not configured on the server")) {
           setPaymentMethodError(null);
@@ -180,7 +245,7 @@ export default function PlaceBidPage() {
       }
     };
 
-    checkPaymentMethod();
+    void checkPaymentMethod();
   }, [loggedIn, userEmail, userId]);
 
   // ----------------------------------------------------
@@ -212,7 +277,7 @@ export default function PlaceBidPage() {
   }, [listing?.$id]);
 
   // ----------------------------------------------------
-  // EARLY RETURNS (LOADING / NOT FOUND)
+  // EARLY RETURNS
   // ----------------------------------------------------
   if (loading)
     return (
@@ -242,7 +307,8 @@ export default function PlaceBidPage() {
   const bidsCount = listing.bids ?? 0;
 
   const hasReserve =
-    typeof listing.reserve_price === "number" && listing.reserve_price > 0;
+    typeof listing.reserve_price === "number" &&
+    listing.reserve_price > 0;
   const reserveMet =
     hasReserve && effectiveBaseBid >= (listing.reserve_price as number);
 
@@ -261,7 +327,6 @@ export default function PlaceBidPage() {
   const displayId =
     listing.listing_id || `AMP-${listing.$id.slice(-6).toUpperCase()}`;
 
-  // Timer props for AdminAuctionTimer – match current-listings card
   const auctionStart = listing.auction_start ?? listing.start_time ?? null;
   const auctionEnd = listing.auction_end ?? listing.end_time ?? null;
 
@@ -271,22 +336,17 @@ export default function PlaceBidPage() {
       ? auctionEndMs <= Date.now()
       : false;
 
-  // Treat SOLD as ended as well
   const auctionEnded = auctionEndedTime || isSoldStatus;
 
-  // SOLD for UI when status is sold OR auction ended and reserve met
   const isSoldForDisplay = isSoldStatus || (auctionEnded && reserveMet);
 
-  // Only allow bidding / buy now when status is live AND end time is in future
   const canBidOrBuyNow = isLiveStatus && !auctionEnded;
 
-  // ✅ Buy Now should ONLY show while current price is below Buy Now
   const canShowBuyNow =
     buyNowPrice !== null &&
     canBidOrBuyNow &&
     effectiveBaseBid < buyNowPrice;
 
-  // Timer label + status
   let timerLabel: string;
   if (auctionEnded) {
     timerLabel = "AUCTION ENDED";
@@ -296,7 +356,7 @@ export default function PlaceBidPage() {
     timerLabel = "AUCTION STARTS IN";
   }
 
-  const timerStatus: "queued" | "live" | "ended" =
+  const timerStatus: TimerStatus =
     auctionEnded
       ? "ended"
       : isLiveStatus
@@ -386,7 +446,7 @@ export default function PlaceBidPage() {
   };
 
   // ----------------------------------------------------
-  // HANDLE BUY NOW – CHARGE CARD VIA STRIPE, THEN MARK SOLD
+  // HANDLE BUY NOW
   // ----------------------------------------------------
   const handleBuyNow = async () => {
     setError(null);
@@ -434,7 +494,6 @@ export default function PlaceBidPage() {
       const totalWithDvla = buyNowPrice + DVLA_FEE_GBP;
       const amountInPence = Math.round(totalWithDvla * 100);
 
-      // 1) Charge via Stripe off-session
       const stripeRes = await fetch("/api/stripe/charge-off-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -466,7 +525,6 @@ export default function PlaceBidPage() {
       const paymentIntentId: string | undefined =
         stripeData.paymentIntentId || stripeData.paymentIntentID;
 
-      // 2) Mark listing as sold / create transaction
       const res = await fetch("/api/buy-now", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -519,38 +577,65 @@ export default function PlaceBidPage() {
         </Link>
       </div>
 
-      {/* DVLA-STYLE PLATE HERO */}
+      {/* CAR HERO + NUMBER PLATE */}
       <div className="max-w-4xl mx-auto mb-6">
-        <div className="relative overflow-hidden rounded-2xl border border-black/40 shadow-xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-7 sm:px-10 sm:py-8 flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
-          <div className="pointer-events-none absolute -top-10 -left-10 h-32 w-32 rounded-full bg-yellow-300/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-yellow-500/20 blur-3xl" />
+        <div className="relative w-full max-w-3xl mx-auto rounded-xl overflow-hidden shadow-lg bg-black">
+          <Image
+            src="/car-rear.jpg"
+            alt={`Rear of car with registration ${listing.registration || ""}`}
+            width={1600}
+            height={1067}
+            className="w-full h-auto block"
+            priority
+          />
 
-          <div className="relative z-10 flex-1 flex flex-col items-center">
-            <DvlaPlate registration={listing.registration} />
-          </div>
-
-          <div className="relative z-10 hidden sm:flex flex-col items-end text-right text-gray-200 text-xs gap-2">
-            <div>
-              <p className="uppercase tracking-[0.18em] text-[10px] text-gray-400">
-                Listing ID
-              </p>
-              <p className="text-sm font-semibold">{displayId}</p>
-            </div>
-
-            <div className="mt-2">
-              <p className="uppercase tracking-[0.18em] text-[10px] text-gray-400">
-                {isSoldForDisplay ? "Winning bid" : "Current bid"}
-              </p>
-              <p className="text-sm font-semibold">
-                £{effectiveBaseBid.toLocaleString()}
-              </p>
+          <div
+            className="absolute left-1/2 -translate-x-1/2"
+            style={{ bottom: "29%" }}
+          >
+            <div
+              style={{
+                transform: "scale(0.42)",
+                transformOrigin: "center bottom",
+              }}
+            >
+              <NumberPlate
+                reg={listing.registration || ""}
+                size="large"
+                variant="rear"
+                showBlueBand={true}
+              />
             </div>
           </div>
         </div>
+
+        <div className="mt-3 flex justify-between text-sm text-gray-600">
+          <span>Listing ID: {displayId}</span>
+        </div>
       </div>
 
-      {/* MAIN PANEL */}
+            {/* MAIN PANEL */}
       <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
+        {/* Header: registration + plate preview */}
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex-1 space-y-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-yellow-600">
+              {listing?.registration || "Registration"}
+            </h1>
+            <p className="text-xs text-gray-400">
+              Auction ID: {listing?.listing_id || listing?.$id}
+            </p>
+          </div>
+
+          <div className="w-full sm:w-72 flex justify-end">
+            <DvlaPlate
+              registration={listing?.registration || ""}
+              size="large"
+              variant="rear"
+            />
+          </div>
+        </div>
+
         {/* Status pills */}
         <div className="flex justify-end gap-2">
           {isSoldForDisplay && (
@@ -612,8 +697,8 @@ export default function PlaceBidPage() {
         {/* TIMER SECTION */}
         <div>
           <p className="text-xs text-gray-500 uppercase">{timerLabel}</p>
-          <div className="inline-block mt-1 px-3 py-2 bg:white border border-black rounded-lg shadow-sm font-semibold text-black">
-            <AdminAuctionTimer
+          <div className="inline-block mt-1 px-3 py-2 bg-white border border-black rounded-lg shadow-sm font-semibold text-black">
+            <LocalAuctionTimer
               start={auctionStart}
               end={auctionEnd}
               status={timerStatus}
@@ -623,11 +708,12 @@ export default function PlaceBidPage() {
 
         {/* BID / LOGIN PANEL */}
         <div className="bg-white border border-black rounded-xl p-6 shadow-sm space-y-4">
-          <h3 className="text-xl font-bold">Place Your Bid</h3>
+          {/* ...rest of your existing content (unchanged)... */}
 
           <p className="text-sm text-gray-700">
             There will be an £80.00 fee added to all winning bids to process
-            DVLA paperwork (auctionmyplate.co.uk has no affiliation with DVLA).
+            DVLA paperwork (auctionmyplate.co.uk has no affiliation with
+            DVLA).
           </p>
 
           {/* DVLA / MOT WARNING */}
@@ -669,7 +755,7 @@ export default function PlaceBidPage() {
             )}
           </div>
 
-          {/* Payment method banners (only when logged in) */}
+          {/* Payment method banners */}
           {loggedIn && (
             <div className="space-y-2 mt-2">
               {checkingPaymentMethod && (
@@ -741,7 +827,7 @@ export default function PlaceBidPage() {
               </p>
             </div>
           ) : (
-            // LOGGED IN, AUCTION LIVE/UPCOMING
+            // LOGGED IN, LIVE/UPCOMING
             <>
               {error && (
                 <p className="bg-red-50 text-red-700 border border-red-200 p-3 rounded">
@@ -778,12 +864,12 @@ export default function PlaceBidPage() {
                     paymentBlocked ||
                     checkingPaymentMethod
                   }
-                  className={`flex-1 rounded-lg py-3 text-lg font-semibold text:white ${
+                  className={`flex-1 rounded-lg py-3 text-lg font-semibold text-white ${
                     canBidOrBuyNow &&
                     !paymentBlocked &&
                     !checkingPaymentMethod
-                      ? "bg-blue-600 hover:bg-blue-700 text-white"
-                      : "bg-gray-400 cursor-not-allowed text-white"
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "bg-gray-400 cursor-not-allowed"
                   }`}
                 >
                   {canBidOrBuyNow
@@ -839,6 +925,26 @@ export default function PlaceBidPage() {
               )}
             </>
           )}
+        </div>
+      </div>
+
+      {/* DESCRIPTION + HISTORY */}
+      <div className="max-w-4xl mx-auto mt-6 mb-10 space-y-6">
+        <div>
+          <h3 className="text-lg font-bold mb-2">Description</h3>
+          <div className="border rounded-lg p-4 bg-gray-50 text-sm text-gray-800 whitespace-pre-line">
+            {listing.description || "No description has been added yet."}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-base font-bold mb-2">
+            Plate history &amp; interesting facts
+          </h3>
+          <div className="border rounded-lg p-3 bg-white text-sm text-gray-800 whitespace-pre-line">
+            {listing.interesting_fact ||
+              "No extra history or interesting facts have been added yet."}
+          </div>
         </div>
       </div>
     </div>

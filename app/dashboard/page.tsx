@@ -163,44 +163,49 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   // Sell form
-  const [sellForm, setSellForm] = useState({
-    registration: "",
-    plate_type: "",
-    expiry_date: "",
-    description: "",
-    reserve_price: "",
-    starting_price: "",
-    buy_now: "",
-    owner_confirmed: false,
-    agreed_terms: false,
-    keepListingUntilSold: false,
-  });
+const [sellForm, setSellForm] = useState({
+  registration: "",
+  plate_type: "",
+  expiry_date: "",
+  description: "",
+  reserve_price: "",
+  starting_price: "",
+  buy_now: "",
+  owner_confirmed: false,
+  agreed_terms: false,
+  keepListingUntilSold: false,
+});
 
-  const [listingFee, setListingFee] = useState(0);
-  const [commissionRate, setCommissionRate] = useState(0);
-  const [expectedReturn, setExpectedReturn] = useState(0);
+  // --------------------------------------------------------
+  // Registration preview – falls back to a clean example if empty
+const rawReg = (sellForm.registration || "").toUpperCase();
+const previewReg = rawReg.trim() || "YOUR REG";
 
-  // 🔢 Extra values to make the calculator clearer
-  const [exampleSalePrice, setExampleSalePrice] = useState(0);
-  const [commissionValue, setCommissionValue] = useState(0);
+const [listingFee, setListingFee] = useState(0);
+const [commissionRate, setCommissionRate] = useState(0);
+const [expectedReturn, setExpectedReturn] = useState(0);
 
-  const [sellError, setSellError] = useState("");
-  const [sellSubmitting, setSellSubmitting] = useState(false);
+// 🔢 Extra values to make the calculator clearer
+const [exampleSalePrice, setExampleSalePrice] = useState(0);
+const [commissionValue, setCommissionValue] = useState(0);
 
-  // Terms
-  const [showTerms, setShowTerms] = useState(false);
+const [sellError, setSellError] = useState("");
+const [sellSubmitting, setSellSubmitting] = useState(false);
 
-  // Password
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [passwordSuccess, setPasswordSuccess] = useState("");
-  const [passwordLoading, setPasswordLoading] = useState(false);
+// Terms
+const [showTerms, setShowTerms] = useState(false);
 
-  // Delete account
-  const [deleteError, setDeleteError] = useState("");
-  const [deleteLoading, setDeleteLoading] = useState(false);
+// Password
+const [currentPassword, setCurrentPassword] = useState("");
+const [newPassword, setNewPassword] = useState("");
+const [confirmPassword, setConfirmPassword] = useState("");
+const [passwordError, setPasswordError] = useState("");
+const [passwordSuccess, setPasswordSuccess] = useState("");
+const [passwordLoading, setPasswordLoading] = useState(false);
+
+// Delete account
+const [deleteError, setDeleteError] = useState("");
+const [deleteLoading, setDeleteLoading] = useState(false);
 
   // --------------------------------------------------------
   // LOAD EVERYTHING (auth-only redirect, no loop)
@@ -1125,322 +1130,228 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* SELL TAB */}
-        {activeTab === "sell" && (
-          <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <h2 className="text-xl font-bold text-yellow-700">
-                Sell my Plate
-              </h2>
-              <p className="text-xs text-gray-600">
-                Listing is free. Fees only apply if your plate sells.
-              </p>
-            </div>
+      {/* SELL TAB */}
+{activeTab === "sell" && (
+  <div className="space-y-6">
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <h2 className="text-xl font-bold text-yellow-700">Sell my Plate</h2>
+      <p className="text-xs text-gray-600">
+        Listing is free. Fees only apply if your plate sells.
+      </p>
+    </div>
 
-            {sellError && (
-              <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-2 border border-red-200">
-                {sellError}
-              </p>
-            )}
+    {sellError && (
+      <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-2 border border-red-200">
+        {sellError}
+      </p>
+    )}
 
-            <form onSubmit={handleSellSubmit} className="space-y-5">
-              {/* REGISTRATION + PLATE PREVIEW */}
-              <div className="space-y-3">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Registration
-                </label>
+    <form onSubmit={handleSellSubmit} className="space-y-5">
+     {/* REGISTRATION + PLATE PREVIEW */}
+<div className="space-y-3">
+  <label className="block text-xs font-semibold text-gray-600 mb-1">
+    Registration
+  </label>
 
-                <input
-                  name="registration"
-                  value={sellForm.registration}
-                  onChange={handleSellChange}
-                  className="border rounded-md w-full px-3 py-2 text-sm"
-                  placeholder="e.g. AB12 CDE"
-                />
+  <input
+    name="registration"
+    value={sellForm.registration}
+    onChange={handleSellChange}
+    className="border rounded-md w-full px-3 py-2 text-sm"
+    placeholder="e.g. AB12 CDE"
+  />
 
-                <div className="flex justify-center pt-3 pb-2">
-                  <NumberPlate
-                    reg={sellForm.registration || ""}
-                    size="large"
-                    variant="rear"
-                    showBlueBand={true}
-                  />
-                </div>
-              </div>
+  {/* Live DVLA-style preview using shared NumberPlate */}
+  <div className="flex justify-center pt-5 pb-3">
+    <NumberPlate
+      reg={sellForm.registration}
+      size="large"
+      variant="rear"
+      showBlueBand={true}
+    />
+  </div>
+</div>
 
-              {/* PLATE TYPE */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Plate Type
-                </label>
-                <select
-                  name="plate_type"
-                  value={sellForm.plate_type}
-                  onChange={handleSellChange}
-                  className="border rounded-md w-full px-3 py-2 text-sm"
-                >
-                  <option value="">Select type</option>
-                  <option value="vehicle">On a Vehicle</option>
-                  <option value="retention">On a Retention Certificate</option>
-                </select>
-              </div>
 
-              {/* RETENTION DATE (conditional) */}
-              {sellForm.plate_type === "retention" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">
-                      Retention Expiry Date
-                    </label>
-                    <input
-                      type="date"
-                      name="expiry_date"
-                      value={sellForm.expiry_date}
-                      onChange={handleSellChange}
-                      className="border rounded-md w-full px-3 py-2 text-sm"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Must be a valid future date.
-                    </p>
-                  </div>
-                </div>
-              )}
+      {/* PLATE TYPE */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">
+          Plate Type
+        </label>
+        <select
+          name="plate_type"
+          value={sellForm.plate_type}
+          onChange={handleSellChange}
+          className="border rounded-md w-full px-3 py-2 text-sm"
+        >
+          <option value="">Select type</option>
+          <option value="certificate">Certificate (V750 / V778)</option>
+          <option value="vehicle">On a vehicle</option>
+          <option value="retention">Retention document</option>
+        </select>
+      </div>
 
-              {/* DESCRIPTION */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Description (optional)
-                </label>
-                <textarea
-                  name="description"
-                  value={sellForm.description}
-                  onChange={handleSellChange}
-                  className="border rounded-md w-full px-3 py-2 text-sm"
-                  rows={4}
-                  placeholder="Tell buyers why this plate is special."
-                />
-              </div>
+      {/* DESCRIPTION */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">
+          Description (optional)
+        </label>
+        <textarea
+          name="description"
+          value={sellForm.description}
+          onChange={handleSellChange}
+          className="border rounded-md w-full px-3 py-2 text-sm min-h-[80px]"
+          placeholder="Tell buyers why this plate is special."
+        />
+      </div>
 
-              {/* PRICE GRID (amount inputs only) */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                {/* RESERVE PRICE */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Reserve Price (£)
-                  </label>
+      {/* RESERVE / BUY NOW FIELDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">
+            Reserve Price (£)
+          </label>
+          <input
+            type="number"
+            name="reserve_price"
+            value={sellForm.reserve_price}
+            onChange={handleSellChange}
+            className="border rounded-md w-full px-3 py-2 text-sm"
+            min={0}
+          />
+        </div>
 
-                  <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
-                    This is the minimum amount you will accept for the plate. If
-                    bidding does not reach this value, the plate will not be
-                    sold.
-                  </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">
+            Buy Now Price (£) (optional)
+          </label>
+          <input
+            type="number"
+            name="buy_now"
+            value={sellForm.buy_now}
+            onChange={handleSellChange}
+            className="border rounded-md w-full px-3 py-2 text-sm"
+            min={0}
+          />
+        </div>
+      </div>
 
-                  <input
-                    type="number"
-                    name="reserve_price"
-                    value={sellForm.reserve_price}
-                    onChange={handleSellChange}
-                    className="border rounded-md w-full px-3 py-2 text-sm"
-                    min={300}
-                    step="0.01"
-                    placeholder="Minimum reserve £300"
-                  />
-                </div>
+      {/* FEES & EXPECTED RETURN – ABOVE NOTE */}
+      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md space-y-2">
+        <h3 className="text-sm font-semibold text-yellow-800">
+          Fees &amp; Expected Return (based on your reserve)
+        </h3>
 
-                {/* STARTING PRICE */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Starting Price (£){" "}
-                    <span className="text-gray-400">(optional)</span>
-                  </label>
+        <p className="text-xs text-gray-700">
+          1) <strong>Final Sale Price</strong> (£
+          {exampleSalePrice.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+          ) – this is based on your reserve and may change if your plate sells
+          at a higher price (
+          <Link href="/fees" className="text-blue-600 underline">
+            please refer to fees
+          </Link>
+          ).
+        </p>
 
-                  <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
-                    This is the starting amount for bidding. Leave empty for £0
-                    (recommended).
-                  </div>
+        <p className="text-xs text-gray-700">
+          2) <strong>Sold Commission</strong> (£
+          {commissionValue.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+          ) – this is our fee and will be deducted from the final hammer price.
+        </p>
 
-                  <input
-                    type="number"
-                    name="starting_price"
-                    value={sellForm.starting_price}
-                    onChange={handleSellChange}
-                    className="border rounded-md w-full px-3 py-2 text-sm"
-                    min={0}
-                    step="0.01"
-                    placeholder="Leave empty for £0"
-                  />
-                </div>
+        <p className="text-xs text-gray-700">
+          3) <strong>Estimated amount you will receive</strong> (£
+          {expectedReturn.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+          ) – based on the reserve price. This may change if the plate sells for
+          more. This is paid when the transfer has been fully completed.
+        </p>
+      </div>
 
-                {/* BUY NOW */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Buy Now (£)
-                  </label>
+      {/* NOTE */}
+      <p className="text-xs text-gray-600">
+        Note: We’ll review your plate before it enters an auction. We may
+        contact you if we need supporting documents or to suggest a different
+        reserve price based on market demand.
+      </p>
 
-                  <div className="bg-yellow-50 border border-yellow-200 text-[11px] text-gray-700 rounded-md p-2 mb-2">
-                    This is the price you are willing to sell the plate for
-                    instantly. If a buyer uses Buy Now, the auction ends
-                    immediately.
-                  </div>
+      {/* CHECKBOXES */}
+      <div className="space-y-2 text-xs text-gray-700">
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="owner_confirmed"
+            checked={sellForm.owner_confirmed}
+            onChange={handleSellChange}
+            className="mt-1"
+          />
+          <span>
+            I confirm I am the legal owner or have authority to sell this
+            registration.
+          </span>
+        </label>
 
-                  <input
-                    type="number"
-                    name="buy_now"
-                    value={sellForm.buy_now}
-                    onChange={handleSellChange}
-                    className="border rounded-md w-full px-3 py-2 text-sm"
-                    min={0}
-                    step="0.01"
-                  />
-                </div>
-              </div>
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="agreed_terms"
+            checked={sellForm.agreed_terms}
+            onChange={handleSellChange}
+            className="mt-1"
+          />
+          <span>
+            I agree to the{" "}
+            <button
+              type="button"
+              className="text-blue-600 underline"
+              onClick={() => setShowTerms(true)}
+            >
+              Terms &amp; Conditions
+            </button>
+            .
+          </span>
+        </label>
 
-              {/* FEES & EXPECTED RETURN SUMMARY – FULL WIDTH, ABOVE NOTE */}
-              <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-800 space-y-2">
-                <p className="font-semibold">
-                  Fees &amp; Expected Return (based on your reserve)
-                </p>
+        {/* KEEP LISTING UNTIL SOLD – NOT REQUIRED */}
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="keepListingUntilSold"
+            checked={sellForm.keepListingUntilSold}
+            onChange={handleSellChange}
+            className="mt-1"
+          />
+          <span>
+            Keep listing this plate in each weekly auction until it sells.
+            <br />
+            <span className="text-xs text-gray-500">
+              If it doesn’t sell, it will automatically enter the next auction
+              unless you request to withdraw it from your dashboard.
+            </span>
+          </span>
+        </label>
+      </div>
 
-                {(() => {
-                  const reserve = parseFloat(sellForm.reserve_price as any) || 0;
-                  const finalSalePrice = reserve > 0 ? reserve : 0;
-                  const commissionAmount =
-                    finalSalePrice > 0
-                      ? (finalSalePrice * commissionRate) / 100 + listingFee
-                      : 0;
-                  const estimatedPayout =
-                    finalSalePrice > 0
-                      ? finalSalePrice - commissionAmount
-                      : 0;
+      {/* SUBMIT BUTTON */}
+      <button
+        type="submit"
+        disabled={sellSubmitting}
+        className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
+      >
+        {sellSubmitting ? "Submitting…" : "Create Listing"}
+      </button>
+    </form>
+  </div>
+)}
 
-                  return (
-                    <>
-                      <p>
-                        <span className="font-semibold">
-                          1) Final sale price:
-                        </span>{" "}
-                        £{finalSalePrice.toFixed(2)}
-                        <br />
-                        <span className="text-[11px] text-gray-600">
-                          This is based on your reserve price and may change if
-                          the plate sells for more.{" "}
-                          <Link
-                            href="/fees"
-                            className="underline text-blue-700"
-                          >
-                            See Fees
-                          </Link>
-                          .
-                        </span>
-                      </p>
-
-                      <p>
-                        <span className="font-semibold">2) Sold commission:</span>{" "}
-                        £{commissionAmount.toFixed(2)}
-                        <br />
-                        <span className="text-[11px] text-gray-600">
-                          This is the amount paid to us and is deducted from the
-                          final hammer price.
-                        </span>
-                      </p>
-
-                      <p>
-                        <span className="font-semibold">
-                          3) Estimated amount you receive:
-                        </span>{" "}
-                        £{estimatedPayout.toFixed(2)}
-                        <br />
-                        <span className="text-[11px] text-gray-600">
-                          This example assumes the plate sells for your reserve.
-                          If bidding goes higher, this figure will increase.
-                          Payment is made once the DVLA transfer has been fully
-                          completed.
-                        </span>
-                      </p>
-                    </>
-                  );
-                })()}
-              </div>
-
-              {/* NOTE – NOW UNDER THE SUMMARY */}
-              <p className="text-xs text-gray-600 mt-2">
-                <strong>Note:</strong> These examples use your reserve price.
-                Exact figures are confirmed after the auction based on the final
-                hammer price and our fees.
-              </p>
-
-              {/* CHECKBOXES */}
-              <div className="space-y-2 text-xs text-gray-700 mt-4">
-                {/* OWNER CONFIRMATION – REQUIRED */}
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    name="owner_confirmed"
-                    checked={sellForm.owner_confirmed}
-                    onChange={handleSellChange}
-                    className="mt-1"
-                  />
-                  <span>
-                    I confirm I am the legal owner or have authority to sell
-                    this registration.
-                  </span>
-                </label>
-
-                {/* TERMS – REQUIRED */}
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    name="agreed_terms"
-                    checked={sellForm.agreed_terms}
-                    onChange={handleSellChange}
-                    className="mt-1"
-                  />
-                  <span>
-                    I agree to the{" "}
-                    <button
-                      type="button"
-                      className="text-blue-600 underline"
-                      onClick={() => setShowTerms(true)}
-                    >
-                      Terms &amp; Conditions
-                    </button>
-                    .
-                  </span>
-                </label>
-
-                {/* KEEP LISTING UNTIL SOLD – OPTIONAL */}
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    name="keepListingUntilSold"
-                    checked={sellForm.keepListingUntilSold}
-                    onChange={handleSellChange}
-                    className="mt-1"
-                  />
-                  <span>
-                    Keep listing this plate in each weekly auction until it
-                    sells.
-                    <br />
-                    <span className="text-xs text-gray-500">
-                      If it doesn’t sell, it will automatically enter the next
-                      auction unless you request to withdraw it from your
-                      dashboard.
-                    </span>
-                  </span>
-                </label>
-              </div>
-
-              {/* SUBMIT BUTTON */}
-              <button
-                type="submit"
-                disabled={sellSubmitting}
-                className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
-              >
-                {sellSubmitting ? "Submitting…" : "Create Listing"}
-              </button>
-            </form>
-          </div>
-        )}
 
         {/* AWAITING TAB */}
         {activeTab === "awaiting" && (

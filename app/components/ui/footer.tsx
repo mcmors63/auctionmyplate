@@ -47,6 +47,13 @@ export default function Footer() {
           >
             Contact Us
           </Link>
+          {" · "}
+          <Link
+            href="/blog"
+            className="underline hover:text-yellow-200 transition"
+          >
+            Blog
+          </Link>
         </p>
       </footer>
 

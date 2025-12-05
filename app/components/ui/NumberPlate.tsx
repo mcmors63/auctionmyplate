@@ -1,85 +1,100 @@
-// app/components/ui/NumberPlate.tsx
+// components/ui/NumberPlate.tsx
 "use client";
 
 import React from "react";
-import { formatDvlaRegistration } from "@/lib/formatDvlaRegistration";
+import { formatUkRegistration } from "@/lib/formatUkRegistration";
 
 type NumberPlateProps = {
   reg: string;
+  size?: "large" | "card";
   variant?: "front" | "rear";
-  size?: "standard" | "card" | "large";
   showBlueBand?: boolean;
-  editable?: boolean;
-  onChange?: (v: string) => void;
 };
 
 export default function NumberPlate({
   reg,
+  size = "card",
   variant = "rear",
-  size = "standard",
-  showBlueBand = true,
-  editable = false,
-  onChange,
+  showBlueBand = false,
 }: NumberPlateProps) {
-  // ✅ Single source of truth for spacing
-  const formattedReg = formatDvlaRegistration(reg || "");
+  // Normalise input and apply DVLA-style formatting
+  const cleaned = (reg || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const formatted = cleaned ? formatUkRegistration(cleaned) : "";
+  const display = formatted || "YOUR REG"; // placeholder like live site
 
-  const sizeMap = {
-    standard: { width: 350, height: 90, font: 46 },
-    card: { width: 240, height: 60, font: 30 },
-    large: { width: 420, height: 110, font: 55 },
-  } as const;
+  // Try to keep correct group spacing: split at the single space if present
+  let leftGroup = display;
+  let rightGroup: string | null = null;
 
-  const { width, height, font } = sizeMap[size] ?? sizeMap.standard;
+  const parts = display.split(" ");
+  if (parts.length === 2) {
+    leftGroup = parts[0];
+    rightGroup = parts[1];
+  }
 
-  const bgColour = variant === "rear" ? "bg-dvla-yellow" : "bg-white";
+  // Sizes
+  const plateHeight = size === "large" ? "h-24 md:h-28" : "h-16 md:h-20";
+  const textSize =
+    size === "large" ? "text-4xl md:text-5xl" : "text-2xl md:text-3xl";
+  const contentPadding =
+    size === "large" ? "px-6 md:px-8" : "px-4 md:px-6";
 
-  const paddingLeft = showBlueBand ? "26%" : "10%";
-  const paddingRight = "10%";
+  const bgColour = variant === "front" ? "bg-[#FDFDF5]" : "bg-[#F4D23C]";
+  const textColour = "text-black";
 
   return (
-    <div className="flex items-center justify-center" style={{ width, height }}>
+    <div
+      className={[
+        "inline-flex items-center rounded-md md:rounded-lg border-[3px] md:border-4 border-black shadow-md overflow-hidden",
+        bgColour,
+        plateHeight,
+      ].join(" ")}
+    >
+      {showBlueBand && (
+        <div className="h-full w-8 md:w-10 bg-[#003399] flex flex-col items-center justify-center text-[9px] md:text-[10px] text-white font-semibold leading-tight">
+          <span className="text-[8px] md:text-[9px]">UK</span>
+        </div>
+      )}
+
       <div
-        className={`relative flex h-full w-full items-center justify-center border-[6px] border-black rounded-md overflow-hidden ${bgColour}`}
+        className={[
+          "flex-1 flex items-center justify-center",
+          contentPadding,
+        ].join(" ")}
       >
-        {/* Blue band (UK) */}
-        {showBlueBand && (
-          <div className="absolute left-0 top-0 h-full w-[14%] bg-dvla-blue flex items-center justify-center">
-            <span className="text-white font-bold text-sm -rotate-90 tracking-widest">
-              UK
+        {rightGroup ? (
+          <div className="flex items-baseline justify-center gap-[0.45em] md:gap-[0.5em]">
+            <span
+              className={[
+                "number-plate-text",
+                textSize,
+                textColour,
+                "font-bold tracking-[0.04em] leading-none",
+              ].join(" ")}
+            >
+              {leftGroup}
+            </span>
+            <span
+              className={[
+                "number-plate-text",
+                textSize,
+                textColour,
+                "font-bold tracking-[0.04em] leading-none",
+              ].join(" ")}
+            >
+              {rightGroup}
             </span>
           </div>
-        )}
-
-        {/* REG TEXT / INPUT */}
-        {editable ? (
-          <input
-            value={formattedReg}
-            maxLength={8}
-            className="bg-transparent border-none outline-none font-dvla uppercase text-black text-center w-full"
-            style={{
-              paddingLeft,
-              paddingRight,
-              fontSize: font,
-              letterSpacing: "8px",
-            }}
-            onChange={(e) => {
-              const next = formatDvlaRegistration(e.target.value);
-              if (onChange) onChange(next);
-            }}
-          />
         ) : (
           <span
-            className="font-dvla text-black select-none uppercase"
-            style={{
-              paddingLeft,
-              paddingRight,
-              fontSize: font,
-              letterSpacing: "8px",
-              whiteSpace: "nowrap",
-            }}
+            className={[
+              "number-plate-text",
+              textSize,
+              textColour,
+              "font-bold tracking-[0.04em] leading-none",
+            ].join(" ")}
           >
-            {formattedReg || "YOUR REG"}
+            {leftGroup}
           </span>
         )}
       </div>

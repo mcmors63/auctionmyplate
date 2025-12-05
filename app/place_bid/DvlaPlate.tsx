@@ -3,23 +3,35 @@
 
 import React from "react";
 import NumberPlate from "@/components/ui/NumberPlate";
-import { formatDvlaRegistration } from "@/lib/formatDvlaRegistration";
 
-type Props = {
-  registration?: string | null;
+type DvlaPlateProps = {
+  // Accept either "registration" or "reg" so it's flexible
+  registration?: string;
+  reg?: string;
+
+  // What callers can pass in:
   size?: "standard" | "card" | "large";
+  variant?: "front" | "rear";
 };
 
-export default function DvlaPlate({ registration, size = "standard" }: Props) {
-  const displayReg = registration
-    ? formatDvlaRegistration(registration)
-    : "YOUR REG";
+export default function DvlaPlate({
+  registration,
+  reg,
+  size = "standard",
+  variant = "rear",
+}: DvlaPlateProps) {
+  // Prefer registration, then reg, then empty string
+  const actualReg = (registration ?? reg ?? "") || "";
+
+  // Map anything that's not "large" to "card" so it matches NumberPlate's type
+  const normalisedSize: "card" | "large" =
+    size === "large" ? "large" : "card";
 
   return (
     <NumberPlate
-      reg={displayReg}
-      variant="rear"
-      size={size}
+      reg={actualReg}
+      size={normalisedSize}
+      variant={variant}
       showBlueBand={true}
     />
   );

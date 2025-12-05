@@ -12,6 +12,9 @@ import AutoLogout from "@/components/ui/AutoLogout";
 // ✅ Cookie banner
 import CookieBanner from "@/components/ui/CookieBanner";
 
+// ✅ Vercel Analytics
+import { Analytics } from "@vercel/analytics/next";
+
 export const metadata: Metadata = {
   title: "Auction My Plate",
   description:
@@ -40,6 +43,9 @@ export default function RootLayout({
 
         {/* 👇 Always rendered, decides itself whether to show */}
         <CookieBanner />
+
+        {/* 👇 Vercel Analytics */}
+        <Analytics />
       </body>
     </html>
   );

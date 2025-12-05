@@ -630,13 +630,14 @@ export default function PlaceBidPage() {
   </div>
 </div>
 
-        <div className="mt-3 flex justify-between text-sm text-gray-600">
+
+                <div className="mt-3 flex justify-between text-sm text-gray-600">
           <span>Listing ID: {displayId}</span>
         </div>
-      </div>
 
-            {/* MAIN PANEL */}
-      <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
+        {/* MAIN PANEL */}
+        <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
+
         {/* Header: registration + plate preview */}
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1 space-y-1">

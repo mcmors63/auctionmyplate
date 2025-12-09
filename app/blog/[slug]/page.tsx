@@ -113,50 +113,56 @@ export default async function BlogPostPage({
       .filter(Boolean) || [];
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <p className="text-xs text-gray-500 mb-3">
-        <a href="/blog" className="hover:underline">
-          ← Back to blog
-        </a>
-      </p>
+    <main className="min-h-screen bg-black text-gray-100 py-10 px-4">
+      <div className="max-w-3xl mx-auto bg-[#111111] rounded-2xl shadow-lg border border-yellow-700/60 p-8">
+        {/* Back link */}
+        <p className="text-xs text-yellow-400 mb-4">
+          <a href="/blog" className="hover:underline">
+            ← Back to blog
+          </a>
+        </p>
 
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">
-        {post.title}
-      </h1>
+        {/* Title + date */}
+        <h1 className="text-3xl md:text-4xl font-extrabold text-yellow-400 mb-2">
+          {post.title}
+        </h1>
 
-      {dateLabel && (
-        <p className="text-xs text-gray-500 mb-4">{dateLabel}</p>
-      )}
-
-      {post.imageUrl && (
-        <div className="w-full h-56 mb-6 rounded-xl overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={post.imageUrl}
-            alt={post.title}
-            className="w-full h-full object-cover"
-          />
-        </div>
-      )}
-
-      <div className="prose prose-sm max-w-none">
-        {paragraphs.length === 0 ? (
-          <p className="text-gray-600 text-sm">
-            No content yet for this article.
-          </p>
-        ) : (
-          paragraphs.map((p, idx) => (
-            <p key={idx} className="text-sm text-gray-800 mb-4">
-              {p.split("\n").map((line, i) => (
-                <span key={i}>
-                  {line}
-                  {i < p.split("\n").length - 1 && <br />}
-                </span>
-              ))}
-            </p>
-          ))
+        {dateLabel && (
+          <p className="text-xs text-gray-400 mb-4">{dateLabel}</p>
         )}
+
+        {/* Hero image */}
+        {post.imageUrl && (
+          <div className="w-full h-56 mb-6 rounded-xl overflow-hidden bg-neutral-900 border border-neutral-800">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={post.imageUrl}
+              alt={post.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="space-y-4 text-sm leading-relaxed">
+          {paragraphs.length === 0 ? (
+            <p className="text-gray-400 text-sm">
+              No content yet for this article.
+            </p>
+          ) : (
+            paragraphs.map((p, idx) => (
+              <p key={idx} className="text-gray-200">
+                {p.split("\n").map((line, i, arr) => (
+                  <span key={i}>
+                    {line}
+                    {i < arr.length - 1 && <br />}
+                  </span>
+                ))}
+              </p>
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

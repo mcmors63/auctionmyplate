@@ -14,7 +14,6 @@ import Link from "next/link";
 import TransferTimelines from "./TransferTimelines";
 import { formatDvlaRegistration } from "@/lib/formatDvlaRegistration";
 
-
 // -----------------------------
 // Appwrite setup
 // -----------------------------
@@ -163,56 +162,55 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   // Sell form
-const [sellForm, setSellForm] = useState({
-  registration: "",
-  plate_type: "",
-  expiry_date: "",
-  description: "",
-  reserve_price: "",
-  starting_price: "",
-  buy_now: "",
-  owner_confirmed: false,
-  agreed_terms: false,
-  keepListingUntilSold: false,
-});
+  const [sellForm, setSellForm] = useState({
+    registration: "",
+    plate_type: "",
+    expiry_date: "",
+    description: "",
+    reserve_price: "",
+    starting_price: "",
+    buy_now: "",
+    owner_confirmed: false,
+    agreed_terms: false,
+    keepListingUntilSold: false,
+  });
 
-  // --------------------------------------------------------
-  // Registration preview – falls back to a clean example if empty
-const rawReg = (sellForm.registration || "").toUpperCase();
-const previewReg = rawReg.trim() || "YOUR REG";
+  // Registration preview (kept for potential future use)
+  const rawReg = (sellForm.registration || "").toUpperCase();
+  const previewReg = rawReg.trim() || "YOUR REG";
 
-const [listingFee, setListingFee] = useState(0);
-const [commissionRate, setCommissionRate] = useState(0);
-const [expectedReturn, setExpectedReturn] = useState(0);
+  const [listingFee, setListingFee] = useState(0);
+  const [commissionRate, setCommissionRate] = useState(0);
+  const [expectedReturn, setExpectedReturn] = useState(0);
 
-// 🔢 Extra values to make the calculator clearer
-const [exampleSalePrice, setExampleSalePrice] = useState(0);
-const [commissionValue, setCommissionValue] = useState(0);
+  // Extra values for fee explanation
+  const [exampleSalePrice, setExampleSalePrice] = useState(0);
+  const [commissionValue, setCommissionValue] = useState(0);
 
-const [sellError, setSellError] = useState("");
-const [sellSubmitting, setSellSubmitting] = useState(false);
+  const [sellError, setSellError] = useState("");
+  const [sellSubmitting, setSellSubmitting] = useState(false);
 
-// Terms
-const [showTerms, setShowTerms] = useState(false);
+  // Terms
+  const [showTerms, setShowTerms] = useState(false);
 
-// Password
-const [currentPassword, setCurrentPassword] = useState("");
-const [newPassword, setNewPassword] = useState("");
-const [confirmPassword, setConfirmPassword] = useState("");
-const [passwordError, setPasswordError] = useState("");
-const [passwordSuccess, setPasswordSuccess] = useState("");
-const [passwordLoading, setPasswordLoading] = useState(false);
+  // Password
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
-// Delete account
-const [deleteError, setDeleteError] = useState("");
-const [deleteLoading, setDeleteLoading] = useState(false);
+  // Delete account
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // --------------------------------------------------------
   // LOAD EVERYTHING (auth-only redirect, no loop)
   // --------------------------------------------------------
   useEffect(() => {
     const loadAll = async () => {
-      // 1) AUTH CHECK – ONLY THIS IS ALLOWED TO REDIRECT
+      // 1) AUTH CHECK
       let current: any;
       try {
         current = await account.get();
@@ -222,7 +220,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         return;
       }
 
-      // 🔥 If this is the admin account, do NOT show seller dashboard
+      // admin goes to admin panel
       if (current.email === "admin@auctionmyplate.co.uk") {
         router.push("/admin");
         return;
@@ -235,9 +233,9 @@ const [deleteLoading, setDeleteLoading] = useState(false);
 
       setUser(current);
 
-      // 2) DATA LOAD – errors here should NOT boot you to login
+      // 2) DATA LOAD
       try {
-        // ----- PROFILE -----
+        // PROFILE
         const profRes = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_PROFILES_DATABASE_ID!,
           process.env.NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID!,
@@ -247,7 +245,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
           setProfile(profRes.documents[0] as Profile);
         }
 
-        // ----- PLATES -----
+        // PLATES
         const platesRes = await databases.listDocuments(
           PLATES_DB_ID,
           PLATES_COLLECTION_ID,
@@ -261,7 +259,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         setLivePlates(docs.filter((p) => p.status === "live"));
         setPlates(docs);
 
-        // ----- TRANSACTIONS (NON-FATAL) -----
+        // TRANSACTIONS (non-fatal)
         try {
           if (!TX_DB_ID || !TX_COLLECTION_ID) {
             console.warn("Transactions env vars missing", {
@@ -275,7 +273,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
               [Query.equal("seller_email", current.email)]
             );
 
-            // Also fetch where you are the buyer
             const txBuyerRes = await databases.listDocuments(
               TX_DB_ID,
               TX_COLLECTION_ID,
@@ -287,7 +284,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
               ...(txBuyerRes.documents as Transaction[]),
             ];
 
-            // de-duplicate by $id just in case
             const byId = new Map<string, Transaction>();
             combined.forEach((tx) => {
               if (tx.$id && !byId.has(tx.$id)) {
@@ -438,10 +434,52 @@ const [deleteLoading, setDeleteLoading] = useState(false);
   // --------------------------------------------------------
   // DELETE ACCOUNT
   // --------------------------------------------------------
+  const userEmail = user?.email ?? null;
+
+  // Derived transactions & helpers need to exist before delete handler uses them
+  const isFinishedTransaction = (tx: Transaction) => {
+    const tStatus = (tx.transaction_status || "").toLowerCase();
+    const pStatus = (tx.payment_status || "").toLowerCase();
+    return (
+      tStatus === "complete" ||
+      tStatus === "completed" ||
+      pStatus === "paid"
+    );
+  };
+
+  const soldTransactions = userEmail
+    ? transactions.filter(
+        (tx) => tx.seller_email === userEmail && isFinishedTransaction(tx)
+      )
+    : [];
+
+  const purchasedTransactions = userEmail
+    ? transactions.filter(
+        (tx) => tx.buyer_email === userEmail && isFinishedTransaction(tx)
+      )
+    : [];
+
+  const activeTransactions = userEmail
+    ? transactions
+        .filter(
+          (tx) =>
+            tx.seller_email === userEmail || tx.buyer_email === userEmail
+        )
+        .filter((tx) => !isFinishedTransaction(tx))
+    : [];
+
+  const historyPlates = plates.filter(
+    (p) =>
+      p.status === "sold" ||
+      p.status === "not_sold" ||
+      p.status === "completed"
+  );
+
+  const queuedPlates = plates.filter((p) => p.status === "queued");
+
   const handleDeleteAccount = async () => {
     if (!user) return;
 
-    // Hard confirmation
     const sure = window.confirm(
       "Are you sure you want to delete your account?\n\n" +
         "This will remove your login and personal details from AuctionMyPlate.\n\n" +
@@ -456,7 +494,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
     setDeleteLoading(true);
 
     try {
-      // 🔍 Client-side safety check – active plates
       const hasActivePlate = plates.some((p) =>
         ["pending", "queued", "live"].includes(
           (p.status || "").toString().toLowerCase()
@@ -472,8 +509,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         return;
       }
 
-      // Active transactions (we’ll define activeTransactions later)
-      // We rely on the derived `activeTransactions` array below.
       if (activeTransactions.length > 0) {
         setDeleteError(
           "You have transactions still in progress. Once all sales and purchases are completed, you can delete your account."
@@ -482,7 +517,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         return;
       }
 
-      // 🔥 Call server to perform the real deletion (double-checks again)
       const res = await fetch("/api/delete-account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -542,7 +576,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
     setExpectedReturn(isNaN(expected) ? 0 : expected);
   };
 
-    // --------------------------------------------------------
+  // --------------------------------------------------------
   // SELL FORM HANDLING
   // --------------------------------------------------------
   const handleSellChange = (
@@ -566,7 +600,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
       val = value;
     }
 
-    // ✅ DVLA formatting for registration field
     if (name === "registration") {
       val = formatDvlaRegistration(value);
     }
@@ -638,7 +671,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
       : 0;
     const buyNow = sellForm.buy_now ? parseFloat(sellForm.buy_now as any) : 0;
 
-    // 🔒 Enforce minimum reserve price of £300
     if (isNaN(reserve) || reserve < 300) {
       setSellError("Minimum reserve price is £300.");
       return;
@@ -665,10 +697,8 @@ const [deleteLoading, setDeleteLoading] = useState(false);
     setSellSubmitting(true);
 
     try {
-      // 🔹 Normalise registration
       const normalizedReg = sellForm.registration.replace(/\s+/g, "").toUpperCase();
 
-      // 🔹 DUPLICATE CHECK
       const existingRes = await databases.listDocuments(
         process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
         process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
@@ -693,7 +723,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         return;
       }
 
-      // 🔹 CREATE LISTING
       const created = await databases.createDocument(
         process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
         process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
@@ -719,7 +748,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         }
       );
 
-      // 🔔 NOTIFY ADMIN + SELLER
       try {
         const notifyRes = await fetch("/api/admin/new-listing", {
           method: "POST",
@@ -747,10 +775,8 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         }
       } catch (notifyErr) {
         console.error("Failed to notify admin about new listing:", notifyErr);
-        // don't block user if email fails
       }
 
-      // 🔄 Refresh seller’s plates
       const platesRes = await databases.listDocuments(
         process.env.NEXT_PUBLIC_APPWRITE_PLATES_DATABASE_ID!,
         process.env.NEXT_PUBLIC_APPWRITE_PLATES_COLLECTION_ID!,
@@ -765,7 +791,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
 
       alert("Listing submitted! Awaiting approval.");
 
-      // reset form + fee state
       setSellForm({
         registration: "",
         plate_type: "",
@@ -791,62 +816,12 @@ const [deleteLoading, setDeleteLoading] = useState(false);
   };
 
   // --------------------------------------------------------
-  // DERIVED TRANSACTION VIEWS
-  // --------------------------------------------------------
-  const userEmail = user?.email ?? null;
-
-  const isFinishedTransaction = (tx: Transaction) => {
-    const tStatus = (tx.transaction_status || "").toLowerCase();
-    const pStatus = (tx.payment_status || "").toLowerCase();
-    return (
-      tStatus === "complete" ||
-      tStatus === "completed" ||
-      pStatus === "paid"
-    );
-  };
-
-  // All completed sales where YOU were the seller
-  const soldTransactions = userEmail
-    ? transactions.filter(
-        (tx) => tx.seller_email === userEmail && isFinishedTransaction(tx)
-      )
-    : [];
-
-  // All completed purchases where YOU were the buyer
-  const purchasedTransactions = userEmail
-    ? transactions.filter(
-        (tx) => tx.buyer_email === userEmail && isFinishedTransaction(tx)
-      )
-    : [];
-
-  // Active transactions (not finished yet) where you are seller or buyer
-  const activeTransactions = userEmail
-    ? transactions
-        .filter(
-          (tx) =>
-            tx.seller_email === userEmail || tx.buyer_email === userEmail
-        )
-        .filter((tx) => !isFinishedTransaction(tx))
-    : [];
-
-  // History plates (only completed auctions)
-  const historyPlates = plates.filter(
-    (p) =>
-      p.status === "sold" ||
-      p.status === "not_sold" ||
-      p.status === "completed"
-  );
-
-  // Approved / queued plates for the Approved / Queued tab
-  const queuedPlates = plates.filter((p) => p.status === "queued");
-
-  // --------------------------------------------------------
   // LOADING STATE
   // --------------------------------------------------------
   if (initialLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-yellow-50">
-        <p className="text-gray-600 text-lg">Loading your dashboard…</p>
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <p className="text-gray-200 text-lg">Loading your dashboard…</p>
       </div>
     );
   }
@@ -855,16 +830,15 @@ const [deleteLoading, setDeleteLoading] = useState(false);
   // RENDER START
   // --------------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#FFFBEA] py-8 px-4">
-      <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-lg p-6 border border-yellow-100">
+    <div className="min-h-screen bg-black py-8 px-4 text-gray-100">
+      <div className="max-w-6xl mx-auto bg-[#111111] rounded-2xl shadow-lg p-6 border border-yellow-700/60">
         {/* Header */}
-                {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+            <h1 className="text-2xl md:text-3xl font-bold text-yellow-400">
               My Dashboard
             </h1>
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm text-gray-300 mt-1">
               Welcome,{" "}
               <span className="font-semibold">
                 {profile?.first_name || user?.name || "Seller"}
@@ -874,7 +848,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
           </div>
           <button
             onClick={handleLogout}
-            className="self-start md:self-auto px-4 py-2 text-sm font-semibold rounded-md border border-red-400 text-red-600 hover:bg-red-50"
+            className="self-start md:self-auto px-4 py-2 text-sm font-semibold rounded-md border border-red-500 text-red-300 hover:bg-red-900/40 transition"
           >
             Logout
           </button>
@@ -882,20 +856,20 @@ const [deleteLoading, setDeleteLoading] = useState(false);
 
         {/* Banners */}
         {bannerError && (
-          <div className="flex items-center gap-2 bg-red-50 text-red-700 p-3 rounded-md mb-4 border border-red-200">
+          <div className="flex items-center gap-2 bg-red-900/30 text-red-200 p-3 rounded-md mb-4 border border-red-700/70">
             <XCircleIcon className="w-5 h-5" />
             <span className="text-sm">{bannerError}</span>
           </div>
         )}
         {bannerSuccess && (
-          <div className="flex items-center gap-2 bg-green-50 text-green-700 p-3 rounded-md mb-4 border border-green-200">
+          <div className="flex items-center gap-2 bg-emerald-900/30 text-emerald-200 p-3 rounded-md mb-4 border border-emerald-700/70">
             <CheckCircleIcon className="w-5 h-5" />
             <span className="text-sm">{bannerSuccess}</span>
           </div>
         )}
 
         {/* Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2 mb-6">
+        <div className="flex flex-wrap gap-2 border-b border-gray-800 pb-2 mb-6">
           {[
             ["profile", "Personal Details"],
             ["sell", "Sell a Plate"],
@@ -924,8 +898,8 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                 onClick={() => setActiveTab(k)}
                 className={`px-4 py-2 text-sm font-semibold rounded-t-md border-b-4 transition ${
                   active
-                    ? "border-yellow-500 text-yellow-700 bg-yellow-50"
-                    : "border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+                    ? "border-yellow-400 text-yellow-300 bg-yellow-500/10"
+                    : "border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-900"
                 }`}
               >
                 {label}
@@ -937,12 +911,12 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         {/* PROFILE TAB */}
         {activeTab === "profile" && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold text-yellow-700">
+            <h2 className="text-xl font-bold text-yellow-300">
               Personal Details
             </h2>
 
             {!profile ? (
-              <p className="text-gray-600">
+              <p className="text-gray-300">
                 No profile found. Please contact support.
               </p>
             ) : (
@@ -960,7 +934,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                     ["phone", "Phone"],
                   ].map(([key, label]) => (
                     <div key={key}>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      <label className="block text-xs font-semibold text-gray-400 mb-1">
                         {label}
                       </label>
                       <input
@@ -968,20 +942,20 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         name={key}
                         value={(profile as any)[key] || ""}
                         onChange={handleProfileChange}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
+                        className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                       />
                     </div>
                   ))}
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">
                       Email (login)
                     </label>
                     <input
                       type="email"
                       value={profile.email || user?.email || ""}
                       disabled
-                      className="border rounded-md w-full px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+                      className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/60 text-gray-500 cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -989,24 +963,24 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                 <button
                   onClick={handleSaveProfile}
                   disabled={savingProfile}
-                  className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
+                  className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
                 >
                   {savingProfile ? "Saving…" : "Save Changes"}
                 </button>
 
                 {/* Change Password */}
-                <div className="mt-10 border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-3 text-yellow-700">
+                <div className="mt-10 border-t border-gray-800 pt-6">
+                  <h3 className="text-lg font-semibold mb-3 text-yellow-300">
                     Change Password
                   </h3>
 
                   {passwordError && (
-                    <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-3 border border-red-200">
+                    <p className="bg-red-900/30 text-red-200 text-sm rounded-md px-3 py-2 mb-3 border border-red-700/70">
                       {passwordError}
                     </p>
                   )}
                   {passwordSuccess && (
-                    <p className="bg-green-50 text-green-700 text-sm rounded-md px-3 py-2 mb-3 border border-green-200">
+                    <p className="bg-emerald-900/30 text-emerald-200 text-sm rounded-md px-3 py-2 mb-3 border border-emerald-700/70">
                       {passwordSuccess}
                     </p>
                   )}
@@ -1016,26 +990,26 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                     className="grid grid-cols-1 md:grid-cols-2 gap-4"
                   >
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      <label className="block text-xs font-semibold text-gray-400 mb-1">
                         Current Password
                       </label>
                       <input
                         type="password"
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
+                        className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      <label className="block text-xs font-semibold text-gray-400 mb-1">
                         New Password
                       </label>
                       <input
                         type="password"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
+                        className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Must include letters &amp; numbers, min 8 characters.
@@ -1043,14 +1017,14 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      <label className="block text-xs font-semibold text-gray-400 mb-1">
                         Confirm New Password
                       </label>
                       <input
                         type="password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="border rounded-md w-full px-3 py-2 text-sm"
+                        className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                       />
                     </div>
 
@@ -1066,23 +1040,23 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                   </form>
 
                   {/* Payment method link */}
-                  <p className="mt-3 text-sm text-gray-700">
+                  <p className="mt-3 text-sm text-gray-300">
                     Need to update your saved card?
                     <Link
-                     href="/payment-method"
-                     className="ml-1 text-blue-600 underline hover:text-blue-800"
-                     >
-                    Manage Payment Method
-                   </Link>
+                      href="/payment-method"
+                      className="ml-1 text-yellow-400 underline hover:text-yellow-300"
+                    >
+                      Manage Payment Method
+                    </Link>
                   </p>
-                 </div>
+                </div>
 
                 {/* Supporting Documents */}
-                <div className="mt-10 border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-3 text-yellow-700">
+                <div className="mt-10 border-t border-gray-800 pt-6">
+                  <h3 className="text-lg font-semibold mb-3 text-yellow-300">
                     Supporting Documents
                   </h3>
-                  <p className="text-xs text-gray-600 mb-3">
+                  <p className="text-xs text-gray-400 mb-3">
                     This section is only completed when documents are requested
                     by Admin after you have sold or purchased a numberplate.
                   </p>
@@ -1092,18 +1066,18 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                   />
                 </div>
 
-                {/* 🔴 Delete Account – VERY BOTTOM of Personal Details */}
-                <div className="mt-10 border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-3 text-red-700">
+                {/* Delete Account */}
+                <div className="mt-10 border-t border-gray-800 pt-6">
+                  <h3 className="text-lg font-semibold mb-3 text-red-400">
                     Delete Account
                   </h3>
-                  <p className="text-xs text-gray-600 mb-3">
+                  <p className="text-xs text-gray-400 mb-3">
                     Deleting your account will permanently remove your login and
                     personal details from AuctionMyPlate.
                     <br />
                     <strong>You cannot delete your account if:</strong>
                   </p>
-                  <ul className="text-xs text-gray-600 list-disc ml-5 mb-3">
+                  <ul className="text-xs text-gray-400 list-disc ml-5 mb-3">
                     <li>
                       You have a plate in a pending, queued or live auction.
                     </li>
@@ -1111,7 +1085,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                   </ul>
 
                   {deleteError && (
-                    <p className="bg-red-50 text-red-700 text-xs rounded-md px-3 py-2 mb-3 border border-red-200">
+                    <p className="bg-red-900/30 text-red-200 text-xs rounded-md px-3 py-2 mb-3 border border-red-700/70">
                       {deleteError}
                     </p>
                   )}
@@ -1130,242 +1104,244 @@ const [deleteLoading, setDeleteLoading] = useState(false);
           </div>
         )}
 
-      {/* SELL TAB */}
-{activeTab === "sell" && (
-  <div className="space-y-6">
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-      <h2 className="text-xl font-bold text-yellow-700">Sell my Plate</h2>
-      <p className="text-xs text-gray-600">
-        Listing is free. Fees only apply if your plate sells.
-      </p>
-    </div>
+        {/* SELL TAB */}
+        {activeTab === "sell" && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <h2 className="text-xl font-bold text-yellow-300">
+                Sell my Plate
+              </h2>
+              <p className="text-xs text-gray-400">
+                Listing is free. Fees only apply if your plate sells.
+              </p>
+            </div>
 
-    {sellError && (
-      <p className="bg-red-50 text-red-700 text-sm rounded-md px-3 py-2 mb-2 border border-red-200">
-        {sellError}
-      </p>
-    )}
+            {sellError && (
+              <p className="bg-red-900/30 text-red-200 text-sm rounded-md px-3 py-2 mb-2 border border-red-700/70">
+                {sellError}
+              </p>
+            )}
 
-    <form onSubmit={handleSellSubmit} className="space-y-5">
-     {/* REGISTRATION + PLATE PREVIEW */}
-<div className="space-y-3">
-  <label className="block text-xs font-semibold text-gray-600 mb-1">
-    Registration
-  </label>
+            <form onSubmit={handleSellSubmit} className="space-y-5">
+              {/* REGISTRATION + PLATE PREVIEW */}
+              <div className="space-y-3">
+                <label className="block text-xs font-semibold text-gray-400 mb-1">
+                  Registration
+                </label>
 
-  <input
-    name="registration"
-    value={sellForm.registration}
-    onChange={handleSellChange}
-    className="border rounded-md w-full px-3 py-2 text-sm"
-    placeholder="e.g. AB12 CDE"
-  />
+                <input
+                  name="registration"
+                  value={sellForm.registration}
+                  onChange={handleSellChange}
+                  className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  placeholder="e.g. AB12 CDE"
+                />
 
-  {/* Live DVLA-style preview using shared NumberPlate */}
-  <div className="flex justify-center pt-5 pb-3">
-    <NumberPlate
-      reg={sellForm.registration}
-      size="large"
-      variant="rear"
-      showBlueBand={true}
-    />
-  </div>
-</div>
+                <div className="flex justify-center pt-5 pb-3">
+                  <NumberPlate
+                    reg={sellForm.registration}
+                    size="large"
+                    variant="rear"
+                    showBlueBand={true}
+                  />
+                </div>
+              </div>
 
+              {/* PLATE TYPE */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">
+                  Plate Type
+                </label>
+                <select
+                  name="plate_type"
+                  value={sellForm.plate_type}
+                  onChange={handleSellChange}
+                  className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                >
+                  <option value="">Select type</option>
+                  <option value="certificate">Certificate (V750 / V778)</option>
+                  <option value="vehicle">On a vehicle</option>
+                  <option value="retention">Retention document</option>
+                </select>
+              </div>
 
-      {/* PLATE TYPE */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-1">
-          Plate Type
-        </label>
-        <select
-          name="plate_type"
-          value={sellForm.plate_type}
-          onChange={handleSellChange}
-          className="border rounded-md w-full px-3 py-2 text-sm"
-        >
-          <option value="">Select type</option>
-          <option value="certificate">Certificate (V750 / V778)</option>
-          <option value="vehicle">On a vehicle</option>
-          <option value="retention">Retention document</option>
-        </select>
-      </div>
+              {/* DESCRIPTION */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">
+                  Description (optional)
+                </label>
+                <textarea
+                  name="description"
+                  value={sellForm.description}
+                  onChange={handleSellChange}
+                  className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm min-h-[80px] bg-black/40 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  placeholder="Tell buyers why this plate is special."
+                />
+              </div>
 
-      {/* DESCRIPTION */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-1">
-          Description (optional)
-        </label>
-        <textarea
-          name="description"
-          value={sellForm.description}
-          onChange={handleSellChange}
-          className="border rounded-md w-full px-3 py-2 text-sm min-h-[80px]"
-          placeholder="Tell buyers why this plate is special."
-        />
-      </div>
+              {/* RESERVE / BUY NOW FIELDS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">
+                    Reserve Price (£)
+                  </label>
+                  <input
+                    type="number"
+                    name="reserve_price"
+                    value={sellForm.reserve_price}
+                    onChange={handleSellChange}
+                    className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    min={0}
+                  />
+                </div>
 
-      {/* RESERVE / BUY NOW FIELDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">
-            Reserve Price (£)
-          </label>
-          <input
-            type="number"
-            name="reserve_price"
-            value={sellForm.reserve_price}
-            onChange={handleSellChange}
-            className="border rounded-md w-full px-3 py-2 text-sm"
-            min={0}
-          />
-        </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">
+                    Buy Now Price (£) (optional)
+                  </label>
+                  <input
+                    type="number"
+                    name="buy_now"
+                    value={sellForm.buy_now}
+                    onChange={handleSellChange}
+                    className="border border-gray-700 rounded-md w-full px-3 py-2 text-sm bg-black/40 text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    min={0}
+                  />
+                </div>
+              </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">
-            Buy Now Price (£) (optional)
-          </label>
-          <input
-            type="number"
-            name="buy_now"
-            value={sellForm.buy_now}
-            onChange={handleSellChange}
-            className="border rounded-md w-full px-3 py-2 text-sm"
-            min={0}
-          />
-        </div>
-      </div>
+              {/* FEES & EXPECTED RETURN */}
+              <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-700/60 rounded-md space-y-2">
+                <h3 className="text-sm font-semibold text-yellow-200">
+                  Fees &amp; Expected Return (based on your reserve)
+                </h3>
 
-      {/* FEES & EXPECTED RETURN – ABOVE NOTE */}
-      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md space-y-2">
-        <h3 className="text-sm font-semibold text-yellow-800">
-          Fees &amp; Expected Return (based on your reserve)
-        </h3>
+                <p className="text-xs text-gray-200">
+                  1) <strong>Final Sale Price</strong> (£
+                  {exampleSalePrice.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                  ) – this is based on your reserve and may change if your plate
+                  sells at a higher price (
+                  <Link href="/fees" className="text-yellow-300 underline">
+                    please refer to fees
+                  </Link>
+                  ).
+                </p>
 
-        <p className="text-xs text-gray-700">
-          1) <strong>Final Sale Price</strong> (£
-          {exampleSalePrice.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-          ) – this is based on your reserve and may change if your plate sells
-          at a higher price (
-          <Link href="/fees" className="text-blue-600 underline">
-            please refer to fees
-          </Link>
-          ).
-        </p>
+                <p className="text-xs text-gray-200">
+                  2) <strong>Sold Commission</strong> (£
+                  {commissionValue.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                  ) – this is our fee and will be deducted from the final
+                  hammer price.
+                </p>
 
-        <p className="text-xs text-gray-700">
-          2) <strong>Sold Commission</strong> (£
-          {commissionValue.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-          ) – this is our fee and will be deducted from the final hammer price.
-        </p>
+                <p className="text-xs text-gray-200">
+                  3) <strong>Estimated amount you will receive</strong> (£
+                  {expectedReturn.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                  ) – based on the reserve price. This may change if the plate
+                  sells for more. This is paid when the transfer has been fully
+                  completed.
+                </p>
+              </div>
 
-        <p className="text-xs text-gray-700">
-          3) <strong>Estimated amount you will receive</strong> (£
-          {expectedReturn.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-          ) – based on the reserve price. This may change if the plate sells for
-          more. This is paid when the transfer has been fully completed.
-        </p>
-      </div>
+              {/* NOTE */}
+              <p className="text-xs text-gray-400">
+                Note: We’ll review your plate before it enters an auction. We
+                may contact you if we need supporting documents or to suggest a
+                different reserve price based on market demand.
+              </p>
 
-      {/* NOTE */}
-      <p className="text-xs text-gray-600">
-        Note: We’ll review your plate before it enters an auction. We may
-        contact you if we need supporting documents or to suggest a different
-        reserve price based on market demand.
-      </p>
+              {/* CHECKBOXES */}
+              <div className="space-y-2 text-xs text-gray-300">
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    name="owner_confirmed"
+                    checked={sellForm.owner_confirmed}
+                    onChange={handleSellChange}
+                    className="mt-1 accent-yellow-500"
+                  />
+                  <span>
+                    I confirm I am the legal owner or have authority to sell
+                    this registration.
+                  </span>
+                </label>
 
-      {/* CHECKBOXES */}
-      <div className="space-y-2 text-xs text-gray-700">
-        <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            name="owner_confirmed"
-            checked={sellForm.owner_confirmed}
-            onChange={handleSellChange}
-            className="mt-1"
-          />
-          <span>
-            I confirm I am the legal owner or have authority to sell this
-            registration.
-          </span>
-        </label>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    name="agreed_terms"
+                    checked={sellForm.agreed_terms}
+                    onChange={handleSellChange}
+                    className="mt-1 accent-yellow-500"
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <button
+                      type="button"
+                      className="text-yellow-300 underline"
+                      onClick={() => setShowTerms(true)}
+                    >
+                      Terms &amp; Conditions
+                    </button>
+                    .
+                  </span>
+                </label>
 
-        <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            name="agreed_terms"
-            checked={sellForm.agreed_terms}
-            onChange={handleSellChange}
-            className="mt-1"
-          />
-          <span>
-            I agree to the{" "}
-            <button
-              type="button"
-              className="text-blue-600 underline"
-              onClick={() => setShowTerms(true)}
-            >
-              Terms &amp; Conditions
-            </button>
-            .
-          </span>
-        </label>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    name="keepListingUntilSold"
+                    checked={sellForm.keepListingUntilSold}
+                    onChange={handleSellChange}
+                    className="mt-1 accent-yellow-500"
+                  />
+                  <span>
+                    Keep listing this plate in each weekly auction until it
+                    sells.
+                    <br />
+                    <span className="text-xs text-gray-500">
+                      If it doesn’t sell, it will automatically enter the next
+                      auction unless you request to withdraw it from your
+                      dashboard.
+                    </span>
+                  </span>
+                </label>
+              </div>
 
-        {/* KEEP LISTING UNTIL SOLD – NOT REQUIRED */}
-        <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            name="keepListingUntilSold"
-            checked={sellForm.keepListingUntilSold}
-            onChange={handleSellChange}
-            className="mt-1"
-          />
-          <span>
-            Keep listing this plate in each weekly auction until it sells.
-            <br />
-            <span className="text-xs text-gray-500">
-              If it doesn’t sell, it will automatically enter the next auction
-              unless you request to withdraw it from your dashboard.
-            </span>
-          </span>
-        </label>
-      </div>
-
-      {/* SUBMIT BUTTON */}
-      <button
-        type="submit"
-        disabled={sellSubmitting}
-        className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
-      >
-        {sellSubmitting ? "Submitting…" : "Create Listing"}
-      </button>
-    </form>
-  </div>
-)}
-
+              {/* SUBMIT BUTTON */}
+              <button
+                type="submit"
+                disabled={sellSubmitting}
+                className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold px-6 py-2 rounded-md text-sm disabled:opacity-50"
+              >
+                {sellSubmitting ? "Submitting…" : "Create Listing"}
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* AWAITING TAB */}
         {activeTab === "awaiting" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+            <h2 className="text-xl font-bold mb-2 text-yellow-300">
               Awaiting Approval
             </h2>
-            <p className="text-sm text-gray-600 mb-2">
+            <p className="text-sm text-gray-300 mb-2">
               These listings have been submitted and are waiting for the admin
               team to review and approve them.
             </p>
 
             {awaitingPlates.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
+              <p className="text-gray-400 text-sm text-center">
                 You have no listings awaiting approval.
               </p>
             ) : (
@@ -1373,26 +1349,26 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                 {awaitingPlates.map((p) => (
                   <div
                     key={p.$id}
-                    className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                    className="border border-gray-800 rounded-xl p-4 bg-[#181818] shadow-sm"
                   >
                     <div className="flex justify-between items-center mb-2">
                       <div>
-                        <h3 className="text-lg font-bold text-yellow-700">
+                        <h3 className="text-lg font-bold text-yellow-300">
                           {p.registration}
                         </h3>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-gray-400">
                           Status:{" "}
-                          <span className="font-semibold text-orange-700">
+                          <span className="font-semibold text-orange-300">
                             Pending review
                           </span>
                         </p>
                       </div>
-                      <span className="px-3 py-1 rounded-md text-xs font-semibold bg-yellow-100 text-yellow-800">
+                      <span className="px-3 py-1 rounded-md text-xs font-semibold bg-yellow-900/40 text-yellow-200">
                         Awaiting Approval
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-700 mt-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-200 mt-2">
                       <p>
                         <strong>Reserve:</strong>{" "}
                         £{p.reserve_price.toLocaleString("en-GB")}
@@ -1410,7 +1386,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                     </div>
 
                     {p.description && (
-                      <p className="mt-2 text-xs text-gray-600">
+                      <p className="mt-2 text-xs text-gray-400">
                         <strong>Your description:</strong> {p.description}
                       </p>
                     )}
@@ -1424,22 +1400,22 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         {/* APPROVED / QUEUED TAB */}
         {activeTab === "approvedQueued" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+            <h2 className="text-xl font-bold mb-2 text-yellow-300">
               Approved / Queued Listings
             </h2>
 
-            <p className="text-sm text-gray-600 mb-1">
+            <p className="text-sm text-gray-300 mb-1">
               These plates have been approved by admin and will enter the next
               weekly auction.
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-400">
               You currently have{" "}
               <strong>{queuedPlates.length}</strong> plate
               {queuedPlates.length === 1 ? "" : "s"} queued.
             </p>
 
             {queuedPlates.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center mt-4">
+              <p className="text-gray-400 text-sm text-center mt-4">
                 You have no approved listings waiting for the next auction.
               </p>
             ) : (
@@ -1454,34 +1430,31 @@ const [deleteLoading, setDeleteLoading] = useState(false);
 
                   const end = p.auction_end ? new Date(p.auction_end) : nextEnd;
 
-                  // If the auction hasn't started yet, allow withdraw
                   const canWithdraw = !!(start && now < start);
 
                   return (
                     <div
                       key={p.$id}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                      className="border border-gray-800 rounded-xl p-4 bg-[#181818] shadow-sm"
                     >
-                      {/* Header */}
                       <div className="flex justify-between items-center mb-2">
                         <div>
-                          <h3 className="text-xl font-bold text-yellow-700">
+                          <h3 className="text-xl font-bold text-yellow-300">
                             {p.registration}
                           </h3>
-                          <p className="text-xs text-gray-600">
+                          <p className="text-xs text-gray-400">
                             Status:{" "}
-                            <span className="font-semibold text-blue-700">
+                            <span className="font-semibold text-blue-300">
                               Approved / queued for next auction
                             </span>
                           </p>
                         </div>
 
-                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-800">
+                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-blue-900/40 text-blue-200">
                           Approved / Queued
                         </span>
                       </div>
 
-                      {/* Plate visual */}
                       <div className="flex justify-center mb-3">
                         <NumberPlate
                           reg={p.registration}
@@ -1491,8 +1464,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         />
                       </div>
 
-                      {/* Price info */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700 mb-2">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-200 mb-2">
                         <p>
                           <strong>Reserve:</strong>{" "}
                           £{p.reserve_price.toLocaleString("en-GB")}
@@ -1509,8 +1481,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         </p>
                       </div>
 
-                      {/* Auction window & timer */}
-                      <div className="mt-2 text-sm text-gray-700">
+                      <div className="mt-2 text-sm text-gray-200">
                         <strong>Auction Window: </strong>
                         {start
                           ? start.toLocaleString("en-GB", {
@@ -1535,8 +1506,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         />
                       </div>
 
-                      {/* Relist setting info */}
-                      <div className="mt-3 text-xs text-gray-600 space-y-1">
+                      <div className="mt-3 text-xs text-gray-400 space-y-1">
                         <p>
                           <strong>Relist setting:</strong>{" "}
                           {p.relist_until_sold
@@ -1545,11 +1515,10 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         </p>
                       </div>
 
-                      {/* Withdraw action (only before auction starts) */}
                       {canWithdraw && (
                         <button
                           type="button"
-                          className="mt-4 inline-flex items-center px-4 py-2 rounded-md bg-red-500 hover:bg-red-600 text-white text-sm font-semibold"
+                          className="mt-4 inline-flex items-center px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm font-semibold"
                           onClick={async () => {
                             if (
                               !window.confirm(
@@ -1583,7 +1552,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                                 return;
                               }
 
-                              // simplest: refresh page so all tabs re-load correctly
                               window.location.reload();
                             } catch (err) {
                               console.error("withdraw-listing error", err);
@@ -1605,11 +1573,11 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         {/* LIVE TAB */}
         {activeTab === "live" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+            <h2 className="text-xl font-bold mb-2 text-yellow-300">
               Live Listings
             </h2>
 
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-300 mb-4">
               These plates are currently in the live weekly auction. You can
               request that a plate is withdrawn after this auction finishes. If{" "}
               <strong>“keep listing until sold”</strong> was selected, the plate
@@ -1618,7 +1586,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
             </p>
 
             {livePlates.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
+              <p className="text-gray-400 text-sm text-center">
                 You currently have no plates in a live auction.
               </p>
             ) : (
@@ -1632,28 +1600,26 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                   return (
                     <div
                       key={p.$id}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                      className="border border-gray-800 rounded-xl p-4 bg-[#181818] shadow-sm"
                     >
-                      {/* Header: reg + badge */}
                       <div className="flex justify-between items-center mb-2">
                         <div>
-                          <h3 className="text-xl font-bold text-yellow-700">
+                          <h3 className="text-xl font-bold text-yellow-300">
                             {p.registration}
                           </h3>
-                          <p className="text-xs text-gray-600">
+                          <p className="text-xs text-gray-400">
                             Status:{" "}
-                            <span className="font-semibold text-green-700">
+                            <span className="font-semibold text-green-300">
                               Live in auction
                             </span>
                           </p>
                         </div>
 
-                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-800">
+                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-900/40 text-green-200">
                           LIVE
                         </span>
                       </div>
 
-                      {/* Number plate visual */}
                       <div className="flex justify-center mb-3">
                         <NumberPlate
                           reg={p.registration}
@@ -1663,8 +1629,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         />
                       </div>
 
-                      {/* Price info */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700 mb-2">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-200 mb-2">
                         <p>
                           <strong>Current Bid:</strong>{" "}
                           {typeof p.current_bid === "number"
@@ -1683,8 +1648,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         </p>
                       </div>
 
-                      {/* Auction timing + timer */}
-                      <div className="mt-2 text-sm text-gray-700">
+                      <div className="mt-2 text-sm text-gray-200">
                         <strong>Auction Window: </strong>
                         {start
                           ? start.toLocaleString("en-GB", {
@@ -1709,8 +1673,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         />
                       </div>
 
-                      {/* Relist & withdraw info */}
-                      <div className="mt-3 text-xs text-gray-600 space-y-1">
+                      <div className="mt-3 text-xs text-gray-400 space-y-1">
                         <p>
                           <strong>Relist setting:</strong>{" "}
                           {p.relist_until_sold
@@ -1718,7 +1681,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                             : "This plate will not be automatically relisted after this auction."}
                         </p>
                         {p.withdraw_after_current && (
-                          <p className="text-orange-700 font-semibold">
+                          <p className="text-orange-300 font-semibold">
                             Withdrawal requested – this plate will be removed
                             after the current auction finishes and will not be
                             entered into the next auction.
@@ -1726,7 +1689,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         )}
                       </div>
 
-                      {/* Actions */}
                       <div className="mt-4 flex flex-wrap gap-3 items-center">
                         <a
                           href={`/listing/${p.$id}`}
@@ -1739,7 +1701,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         {!p.withdraw_after_current && (
                           <button
                             type="button"
-                            className="inline-flex items-center px-4 py-2 rounded-md bg-red-500 hover:bg-red-600 text-white text-sm font-semibold"
+                            className="inline-flex items-center px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm font-semibold"
                             onClick={async () => {
                               if (
                                 !window.confirm(
@@ -1773,7 +1735,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                                   return;
                                 }
 
-                                // Update local state so the button disappears and message shows
                                 setLivePlates((prev) =>
                                   prev.map((plate) =>
                                     plate.$id === p.$id
@@ -1809,16 +1770,16 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         {/* SOLD TAB */}
         {activeTab === "sold" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+            <h2 className="text-xl font-bold mb-2 text-yellow-300">
               Sold Plates (You as Seller)
             </h2>
-            <p className="text-sm text-gray-600 mb-2">
+            <p className="text-sm text-gray-300 mb-2">
               Completed sales where you were the seller. These should line up
               with what admin sees in the Transactions screen.
             </p>
 
             {soldTransactions.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
+              <p className="text-gray-400 text-sm text-center">
                 You don&apos;t have any completed sales yet.
               </p>
             ) : (
@@ -1843,7 +1804,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                   return (
                     <div
                       key={tx.$id}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                      className="border border-gray-800 rounded-xl p-4 bg-[#181818] shadow-sm"
                     >
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-4">
@@ -1854,10 +1815,10 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                             showBlueBand={true}
                           />
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">
+                            <p className="text-sm font-semibold text-gray-100">
                               {regText}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-400">
                               Buyer: {tx.buyer_email || "Unknown"}
                             </p>
                             <p className="text-xs text-gray-500">
@@ -1865,12 +1826,12 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                             </p>
                           </div>
                         </div>
-                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700">
+                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-900/40 text-green-200">
                           COMPLETED
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-gray-200 mt-2">
                         <p>
                           <strong>Sale price:</strong> £
                           {(tx.sale_price ?? 0).toFixed(2)}
@@ -1890,7 +1851,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-400 mt-3">
                         <p>
                           <strong>Created:</strong>{" "}
                           {created || "Not recorded"}
@@ -1911,15 +1872,15 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         {/* PURCHASED TAB */}
         {activeTab === "purchased" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+            <h2 className="text-xl font-bold mb-2 text-yellow-300">
               Purchased Plates (You as Buyer)
             </h2>
-            <p className="text-sm text-gray-600 mb-2">
+            <p className="text-sm text-gray-300 mb-2">
               Completed purchases where you were the buyer.
             </p>
 
             {purchasedTransactions.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
+              <p className="text-gray-400 text-sm text-center">
                 You haven&apos;t completed any purchases yet.
               </p>
             ) : (
@@ -1941,10 +1902,14 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                       ? new Date(tx.updated_at).toLocaleString("en-GB")
                       : null;
 
+                  const salePrice = tx.sale_price ?? 0;
+                  const dvlaFee = tx.dvla_fee ?? 0;
+                  const totalPaid = salePrice + dvlaFee;
+
                   return (
                     <div
                       key={tx.$id}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                      className="border border-gray-800 rounded-xl p-4 bg-[#181818] shadow-sm"
                     >
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-4">
@@ -1955,10 +1920,10 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                             showBlueBand={true}
                           />
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">
+                            <p className="text-sm font-semibold text-gray-100">
                               {regText}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-400">
                               Seller: {tx.seller_email || "Unknown"}
                             </p>
                             <p className="text-xs text-gray-500">
@@ -1966,15 +1931,15 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                             </p>
                           </div>
                         </div>
-                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700">
+                        <span className="px-3 py-1 rounded-md text-xs font-semibold bg-green-900/40 text-green-200">
                           COMPLETED
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-gray-700 mt-2">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-gray-200 mt-2">
                         <p>
                           <strong>Sale price:</strong> £
-                          {(tx.sale_price ?? 0).toFixed(2)}
+                          {salePrice.toFixed(2)}
                         </p>
                         <p>
                           <strong>Commission:</strong> £
@@ -1983,17 +1948,15 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         </p>
                         <p>
                           <strong>DVLA fee:</strong> £
-                          {(tx.dvla_fee ?? 0).toFixed(2)}
+                          {dvlaFee.toFixed(2)}
                         </p>
                         <p>
                           <strong>Total paid (approx):</strong> £
-                          {(
-                            (tx.sale_price ?? 0) + (tx.dvla_fee ?? 0)
-                          ).toFixed(2)}
+                          {totalPaid.toFixed(2)}
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-400 mt-3">
                         <p>
                           <strong>Created:</strong>{" "}
                           {created || "Not recorded"}
@@ -2014,10 +1977,12 @@ const [deleteLoading, setDeleteLoading] = useState(false);
         {/* HISTORY TAB */}
         {activeTab === "history" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">History</h2>
+            <h2 className="text-xl font-bold mb-2 text-yellow-300">
+              History
+            </h2>
 
             {historyPlates.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
+              <p className="text-gray-400 text-sm text-center">
                 Sold, unsold and completed auctions will appear here.
               </p>
             ) : (
@@ -2025,26 +1990,26 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                 {historyPlates.map((plate) => (
                   <div
                     key={plate.$id}
-                    className="border border-gray-200 rounded-xl p-5 bg-gray-50 shadow-sm"
+                    className="border border-gray-800 rounded-xl p-5 bg-[#181818] shadow-sm"
                   >
                     <div className="flex justify-between items-center mb-2">
-                      <h3 className="text-xl font-bold text-yellow-700">
+                      <h3 className="text-xl font-bold text-yellow-300">
                         {plate.registration}
                       </h3>
                       <span
                         className={`px-3 py-1 rounded-md text-xs font-semibold ${
                           plate.status === "sold"
-                            ? "bg-green-100 text-green-700"
+                            ? "bg-green-900/40 text-green-200"
                             : plate.status === "not_sold"
-                            ? "bg-red-100 text-red-600"
-                            : "bg-gray-100 text-gray-600"
+                            ? "bg-red-900/40 text-red-200"
+                            : "bg-gray-800 text-gray-200"
                         }`}
                       >
                         {plate.status.toUpperCase()}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-700">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-200">
                       <p>
                         <strong>Reserve:</strong> £{plate.reserve_price}
                       </p>
@@ -2086,7 +2051,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                                 )
                               );
                               btn.outerHTML =
-                                '<div class="mt-3 text-green-700 font-semibold bg-green-100 px-3 py-2 rounded-md text-center">Relisted</div>';
+                                '<div class="mt-3 text-green-200 font-semibold bg-green-900/40 px-3 py-2 rounded-md text-center">Relisted</div>';
                             } else {
                               btn.textContent = "Retry Relist";
                               btn.disabled = false;
@@ -2099,7 +2064,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                             alert("Something went wrong.");
                           }
                         }}
-                        className="mt-3 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-md text-sm transition"
+                        className="mt-3 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-4 rounded-md text-sm transition"
                       >
                         Relist
                       </button>
@@ -2111,36 +2076,43 @@ const [deleteLoading, setDeleteLoading] = useState(false);
           </div>
         )}
 
-                {/* TRANSACTIONS TAB */}
+        {/* TRANSACTIONS TAB */}
         {activeTab === "transactions" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-2 text-yellow-700">
+            <h2 className="text-xl font-bold mb-2 text-yellow-300">
               Transactions &amp; Documents
             </h2>
-            <p className="text-sm text-gray-600 mb-2">
-              Active sales and purchases where payment and DVLA transfer are still in progress.
-              You&apos;ll see document upload options here when admin has requested information
-              from you.
+            <p className="text-sm text-gray-300 mb-2">
+              Active sales and purchases where payment and DVLA transfer are
+              still in progress. You&apos;ll see document upload options here
+              when admin has requested information from you.
             </p>
 
-            {/* Small summary */}
-            <div className="flex flex-wrap gap-3 text-xs text-gray-700 mb-2">
-              <span className="px-3 py-1 rounded-full bg-yellow-50 border border-yellow-200">
+            <div className="flex flex-wrap gap-3 text-xs text-gray-200 mb-2">
+              <span className="px-3 py-1 rounded-full bg-yellow-900/30 border border-yellow-700/60">
                 As seller:{" "}
                 <strong>
-                  {activeTransactions.filter((t) => t.seller_email === userEmail).length}
+                  {
+                    activeTransactions.filter(
+                      (t) => t.seller_email === userEmail
+                    ).length
+                  }
                 </strong>
               </span>
-              <span className="px-3 py-1 rounded-full bg-yellow-50 border border-yellow-200">
+              <span className="px-3 py-1 rounded-full bg-yellow-900/30 border border-yellow-700/60">
                 As buyer:{" "}
                 <strong>
-                  {activeTransactions.filter((t) => t.buyer_email === userEmail).length}
+                  {
+                    activeTransactions.filter(
+                      (t) => t.buyer_email === userEmail
+                    ).length
+                  }
                 </strong>
               </span>
             </div>
 
             {activeTransactions.length === 0 ? (
-              <p className="text-gray-600 text-sm text-center">
+              <p className="text-gray-400 text-sm text-center">
                 You don&apos;t have any active transactions right now.
               </p>
             ) : (
@@ -2163,10 +2135,10 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                     statusLabel === "completed" ||
                     statusLabel === "complete" ||
                     statusLabel === "paid"
-                      ? "bg-green-100 text-green-700"
+                      ? "bg-green-900/40 text-green-200"
                       : statusLabel === "processing"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-600";
+                      ? "bg-yellow-900/40 text-yellow-200"
+                      : "bg-gray-800 text-gray-200";
 
                   const regText =
                     (tx as any).registration ||
@@ -2205,12 +2177,11 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                   return (
                     <div
                       key={tx.$id}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 shadow-sm"
+                      className="border border-gray-800 rounded-xl p-4 bg-[#181818] shadow-sm"
                     >
-                      {/* Header: plate / listing / status */}
+                      {/* Header */}
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-4">
-                          {/* Plate visual */}
                           <NumberPlate
                             reg={regText}
                             size="card"
@@ -2218,9 +2189,8 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                             showBlueBand={true}
                           />
 
-                          {/* Text details */}
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">
+                            <p className="text-sm font-semibold text-gray-100">
                               {regText}
                             </p>
                             <p className="text-xs text-gray-500">
@@ -2238,7 +2208,6 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                           </div>
                         </div>
 
-                        {/* Status pill */}
                         <span
                           className={`px-3 py-1 rounded-md text-xs font-semibold ${statusClasses}`}
                         >
@@ -2246,10 +2215,11 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         </span>
                       </div>
 
-                      {/* SUMMARY BOX – per transaction */}
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-gray-700 mt-2 space-y-1">
+                      {/* Summary box */}
+                      <div className="bg-yellow-900/20 border border-yellow-700/60 rounded-lg px-3 py-2 text-xs text-gray-200 mt-2 space-y-1">
                         <p>
-                          <strong>Sale price:</strong> £{salePrice.toFixed(2)}
+                          <strong>Sale price:</strong> £
+                          {salePrice.toFixed(2)}
                         </p>
                         <p>
                           <strong>DVLA fee:</strong> £{dvlaFee.toFixed(2)}
@@ -2283,7 +2253,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                       </div>
 
                       {/* Dates */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600 mt-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-400 mt-3">
                         <p>
                           <strong>Created:</strong>{" "}
                           {created || "Not recorded"}
@@ -2294,10 +2264,10 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                         </p>
                       </div>
 
-                      {/* Documents uploader (only when admin has requested docs) */}
+                      {/* Documents uploader */}
                       {showUploader && (
-                        <div className="mt-4 border-t pt-3">
-                          <p className="text-xs text-gray-600 mb-2">
+                        <div className="mt-4 border-t border-gray-800 pt-3">
+                          <p className="text-xs text-gray-400 mb-2">
                             {isSeller && needsSellerDocs
                               ? "We’re waiting for your seller documents to progress this sale. Please upload your DVLA paperwork (V5C, retention certificate, etc.) below."
                               : isBuyer && needsBuyerDocs
@@ -2319,14 +2289,14 @@ const [deleteLoading, setDeleteLoading] = useState(false);
           </div>
         )}
 
-        {/* TERMS & CONDITIONS MODAL (same as main site) */}
+        {/* TERMS & CONDITIONS MODAL */}
         {showTerms && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden relative">
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-[#111111] text-gray-100 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden relative border border-yellow-700/60">
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
                 <div>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                  <h2 className="text-xl md:text-2xl font-bold text-yellow-300">
                     Terms &amp; Conditions
                   </h2>
                   <p className="text-xs text-gray-500">
@@ -2334,7 +2304,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
                   </p>
                 </div>
                 <button
-                  className="text-gray-500 hover:text-gray-700 text-xl"
+                  className="text-gray-400 hover:text-gray-200 text-xl"
                   onClick={() => setShowTerms(false)}
                   aria-label="Close terms"
                 >
@@ -2343,7 +2313,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
               </div>
 
               {/* Body */}
-              <div className="px-6 py-5 overflow-y-auto max-h-[70vh] text-sm leading-relaxed text-gray-800 space-y-6">
+              <div className="px-6 py-5 overflow-y-auto max-h-[70vh] text-sm leading-relaxed text-gray-100 space-y-6">
                 <p>
                   These Terms and Conditions govern your use of
                   AuctionMyPlate.co.uk (“we”, “us”, “our”). By accessing or
@@ -2540,10 +2510,10 @@ const [deleteLoading, setDeleteLoading] = useState(false);
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-3 bg-gray-50 border-t flex justify-end">
+              <div className="px-6 py-3 bg-black border-t border-gray-800 flex justify-end">
                 <button
                   onClick={() => setShowTerms(false)}
-                  className="px-4 py-2 rounded-md bg-black text-white text-sm font-semibold"
+                  className="px-4 py-2 rounded-md bg-yellow-500 text-black text-sm font-semibold hover:bg-yellow-400"
                 >
                   Close
                 </button>

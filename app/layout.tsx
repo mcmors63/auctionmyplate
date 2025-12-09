@@ -6,12 +6,14 @@ import { Analytics } from "@vercel/analytics/react";
 
 // ✅ Existing imports
 import Navbar from "@/components/ui/Navbar";
-// ⬇️ Make sure this path matches your actual file name & case
 import Footer from "@/components/ui/footer";
 import AutoLogout from "@/components/ui/AutoLogout";
 
 // ✅ Cookie banner
 import CookieBanner from "@/components/ui/CookieBanner";
+
+// ✅ NEW: Google Ads loader (consent-aware)
+import GoogleAdsLoader from "@/components/ui/GoogleAdsLoader";
 
 export const metadata: Metadata = {
   title: "Auction My Plate",
@@ -31,16 +33,20 @@ export default function RootLayout({
 
         <AutoLogout />
 
+        {/* 👇 Loads Google Ads *only* after cookie consent */}
+        <GoogleAdsLoader />
+
         <main className="flex-grow">
-          <Suspense fallback={null}>
-            {children}
-          </Suspense>
+          <Suspense fallback={null}>{children}</Suspense>
         </main>
 
         <Footer />
 
         {/* 👇 Always rendered, decides itself whether to show */}
         <CookieBanner />
+
+        {/* Vercel Analytics (safe / first-party) */}
+        <Analytics />
       </body>
     </html>
   );

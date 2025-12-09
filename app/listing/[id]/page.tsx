@@ -29,7 +29,7 @@ type Listing = {
   $id: string;
   registration?: string;
   listing_id?: string;
-  description?: string;        // seller's text from submit form
+  description?: string; // seller's text from submit form
   image_url?: string;
   status?: string;
   auction_start?: string | null;
@@ -162,17 +162,27 @@ export default function ListingDetailsPage() {
   // ----------------------------------------
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FFFBEA] flex items-center justify-center">
-        <p className="text-gray-700 text-sm">Loading listing…</p>
-      </div>
+      <main className="min-h-screen bg-black text-gray-100 flex items-center justify-center">
+        <p className="text-gray-300 text-sm">Loading listing…</p>
+      </main>
     );
   }
 
   if (error || !listing) {
     return (
-      <div className="min-h-screen bg-[#FFFBEA] flex items-center justify-center">
-        <p className="text-red-600 text-base">{error || "Listing not found."}</p>
-      </div>
+      <main className="min-h-screen bg-black text-gray-100 flex items-center justify-center px-4">
+        <div className="max-w-md bg-white rounded-2xl shadow-lg border border-yellow-100 p-6 text-center">
+          <p className="text-red-600 text-base mb-2">
+            {error || "Listing not found."}
+          </p>
+          <Link
+            href="/current-listings"
+            className="inline-flex items-center justify-center mt-2 px-4 py-2 rounded-md bg-yellow-500 text-sm font-semibold text-black hover:bg-yellow-600"
+          >
+            ← Back to listings
+          </Link>
+        </div>
+      </main>
     );
   }
 
@@ -226,10 +236,10 @@ export default function ListingDetailsPage() {
 
   // ------------------ RENDER ------------------
   return (
-    <div className="min-h-screen bg-[#FFFBEA] py-10 px-4">
-      <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-md overflow-hidden text-sm md:text-base">
+    <main className="min-h-screen bg-black text-gray-100 py-10 px-4">
+      <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-lg border border-yellow-100 overflow-hidden text-sm md:text-base">
         {/* NAV */}
-        <div className="flex justify-between items-center px-6 pt-4 pb-3">
+        <div className="flex justify-between items-center px-6 pt-4 pb-3 border-b border-gray-100">
           <Link
             href="/current-listings"
             className="text-blue-700 underline text-sm"
@@ -257,7 +267,7 @@ export default function ListingDetailsPage() {
         </div>
 
         {/* IMAGE + OVERLAYED PLATE */}
-        <div className="px-6 pb-6">
+        <div className="px-6 pb-6 pt-4">
           <div className="relative w-full max-w-3xl mx-auto rounded-xl overflow-hidden shadow-lg bg-black">
             {/* Car image */}
             <Image
@@ -269,7 +279,7 @@ export default function ListingDetailsPage() {
               priority
             />
 
-            {/* Plate anchored to bumper – same component as Current Listings */}
+            {/* Plate anchored to bumper – using shared NumberPlate component */}
             <div
               className="absolute left-1/2 -translate-x-1/2"
               style={{ bottom: "29%" }}
@@ -316,8 +326,10 @@ export default function ListingDetailsPage() {
         )}
 
         {/* Auction Details */}
-        <div className="mt-2 mx-6 mb-8 bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <h2 className="text-lg font-bold mb-4">Auction Details</h2>
+        <div className="mt-2 mx-6 mb-8 bg-gray-50 rounded-xl border border-gray-200 shadow-sm p-6">
+          <h2 className="text-lg md:text-xl font-bold mb-4 text-yellow-500">
+            Auction Details
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
             <div className="space-y-2">
@@ -397,14 +409,16 @@ export default function ListingDetailsPage() {
         {/* DESCRIPTION + HISTORY */}
         <div className="mx-6 mb-8 space-y-6">
           <div>
-            <h3 className="text-lg font-bold mb-2">Description</h3>
+            <h3 className="text-lg md:text-xl font-bold mb-2 text-yellow-500">
+              Description
+            </h3>
             <div className="border rounded-lg p-4 bg-gray-50 text-sm text-gray-800 whitespace-pre-line">
               {description || "No description has been added yet."}
             </div>
           </div>
 
           <div>
-            <h3 className="text-base font-bold mb-2">
+            <h3 className="text-base md:text-lg font-bold mb-2 text-yellow-500">
               Plate history &amp; interesting facts
             </h3>
             <div className="border rounded-lg p-3 bg-white text-sm text-gray-800 whitespace-pre-line">
@@ -421,7 +435,7 @@ export default function ListingDetailsPage() {
               <div className="flex flex-col gap-3">
                 <Link
                   href={`/place_bid?id=${listing.$id}`}
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+                  className="inline-flex items-center justify-center rounded-md bg-yellow-500 px-5 py-3 font-semibold text-black hover:bg-yellow-600"
                 >
                   Place a bid
                 </Link>
@@ -489,6 +503,6 @@ export default function ListingDetailsPage() {
           </button>
         </div>
       )}
-    </div>
+    </main>
   );
 }

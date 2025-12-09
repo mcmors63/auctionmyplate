@@ -124,13 +124,18 @@ export async function POST(req: Request) {
           );
         }
 
-        // 🕐 SOFT CLOSE – extend by 5 minutes if < 2 minutes left
+        // 🕐 TRUE 5-MIN SOFT CLOSE
+        // If a bid is placed in the final 5 minutes,
+        // extend the auction so it ends 5 minutes from this bid time.
         const remainingMs = endMs - nowMs;
-        const TWO_MINUTES = 2 * 60 * 1000;
-        const FIVE_MINUTES = 5 * 60 * 1000;
+        const SOFT_CLOSE_WINDOW_MINUTES = 5;
+        const SOFT_CLOSE_EXTENSION_MINUTES = 5;
 
-        if (remainingMs > 0 && remainingMs <= TWO_MINUTES) {
-          const extendedEnd = new Date(nowMs + FIVE_MINUTES);
+        const softCloseWindowMs = SOFT_CLOSE_WINDOW_MINUTES * 60 * 1000;
+        const softCloseExtensionMs = SOFT_CLOSE_EXTENSION_MINUTES * 60 * 1000;
+
+        if (remainingMs > 0 && remainingMs <= softCloseWindowMs) {
+          const extendedEnd = new Date(nowMs + softCloseExtensionMs);
           newAuctionEnd = extendedEnd.toISOString();
         }
       }
@@ -172,7 +177,7 @@ export async function POST(req: Request) {
           amount: bidAmount,
           timestamp: now.toISOString(),
           bidder_email: userEmail,
-          // no bidder_id here – keep schema loose for the bids collection
+          // bidder_id is optional – schema stays loose
         }
       );
     } catch (err) {
@@ -184,7 +189,7 @@ export async function POST(req: Request) {
     // Update listing:
     //  - current_bid
     //  - bids count
-    //  - SOFT CLOSE extension
+    //  - soft-close extension (auction_end)
     //  - bidder info (highest_bidder / bidder_email / bidder_id / last_bid_time)
     // -----------------------------
     const newBidsCount =
@@ -193,7 +198,7 @@ export async function POST(req: Request) {
     const updatePayload: Record<string, any> = {
       current_bid: bidAmount,
       bids: newBidsCount,
-      highest_bidder: userEmail, // you can change this to a masked value later
+      highest_bidder: userEmail,
       bidder_email: userEmail,
       last_bid_time: now.toISOString(),
     };

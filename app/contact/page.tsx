@@ -9,7 +9,7 @@ export const metadata = {
 
 export default function ContactPage() {
   return (
-    <main className="min-h-screen bg-[#F5F5F5] py-10 px-4">
+    <main className="min-h-screen bg-black text-gray-100 py-10 px-4">
       <ContactForm />
     </main>
   );

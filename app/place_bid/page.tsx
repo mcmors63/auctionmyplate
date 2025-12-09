@@ -162,42 +162,46 @@ export default function PlaceBidPage() {
 
   const [vehicleNoticeAccepted, setVehicleNoticeAccepted] = useState(false);
 
-  // ----------------------------------------------------
-  // LOGIN CHECK
+   // ----------------------------------------------------
+  // LOGIN CHECK (single, clean source of truth)
   // ----------------------------------------------------
   useEffect(() => {
     const checkLogin = async () => {
-      if (typeof window !== "undefined") {
-        const storedEmail = window.localStorage.getItem("amp_user_email");
-        const storedId = window.localStorage.getItem("amp_user_id");
-        if (storedEmail) {
-          setLoggedIn(true);
-          setUserEmail(storedEmail);
-          if (storedId) setUserId(storedId);
+      try {
+        // 1) Try real Appwrite session first
+        const current = await account.get();
+
+        setLoggedIn(true);
+        setUserEmail(current.email);
+        setUserId(current.$id);
+
+        // 2) Keep localStorage in sync as a convenience cache
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("amp_user_email", current.email);
+          window.localStorage.setItem("amp_user_id", current.$id);
         }
-      }
+      } catch {
+        // 3) If no live session, fall back to any local marker
+        if (typeof window !== "undefined") {
+          const storedEmail = window.localStorage.getItem("amp_user_email");
+          const storedId = window.localStorage.getItem("amp_user_id");
 
-      if (!userEmail) {
-        try {
-          const current = await account.get();
-          setLoggedIn(true);
-          setUserEmail(current.email);
-          setUserId(current.$id);
-
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem("amp_user_email", current.email);
-            window.localStorage.setItem("amp_user_id", current.$id);
+          if (storedEmail) {
+            setLoggedIn(true);
+            setUserEmail(storedEmail);
+            if (storedId) setUserId(storedId);
+            return;
           }
-        } catch {
-          setLoggedIn(false);
-          setUserEmail(null);
-          setUserId(null);
         }
+
+        // 4) Definitely logged out
+        setLoggedIn(false);
+        setUserEmail(null);
+        setUserId(null);
       }
     };
 
     void checkLogin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ----------------------------------------------------
@@ -281,15 +285,15 @@ export default function PlaceBidPage() {
   // ----------------------------------------------------
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5]">
-        <p className="text-lg text-gray-600">Loading listing…</p>
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <p className="text-lg text-gray-200">Loading listing…</p>
       </div>
     );
 
   if (!listing)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5]">
-        <p className="text-red-600 text-xl">Listing not found.</p>
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <p className="text-red-400 text-xl">Listing not found.</p>
       </div>
     );
 
@@ -566,14 +570,14 @@ export default function PlaceBidPage() {
   // RENDER
   // ----------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#F5F5F5] py-8 px-4">
+    <div className="min-h-screen bg-black text-gray-100 py-8 px-4">
       {/* BACK LINK */}
       <div className="max-w-4xl mx-auto mb-4">
         <Link
           href="/current-listings"
-          className="text-blue-700 underline text-sm"
+          className="text-sm text-[#FFD500] underline hover:text-yellow-300"
         >
-          ← Back
+          ← Back to listings
         </Link>
       </div>
 
@@ -609,17 +613,17 @@ export default function PlaceBidPage() {
           </div>
         </div>
 
-        <div className="mt-3 flex justify-between text-sm text-gray-600">
+        <div className="mt-3 flex justify-between text-sm text-gray-300">
           <span>Listing ID: {displayId}</span>
         </div>
       </div>
 
-            {/* MAIN PANEL */}
-      <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-300 shadow-sm p-6 space-y-8">
+      {/* MAIN PANEL */}
+      <div className="max-w-4xl mx-auto bg-[#111111] rounded-2xl border border-yellow-700 shadow-lg p-6 sm:p-8 space-y-8">
         {/* Header: registration + plate preview */}
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1 space-y-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-yellow-600">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#FFD500]">
               {listing?.registration || "Registration"}
             </h1>
             <p className="text-xs text-gray-400">
@@ -645,19 +649,19 @@ export default function PlaceBidPage() {
           )}
 
           {!isSoldForDisplay && canBidOrBuyNow && (
-            <span className="px-4 py-1 bg-[#FFD500] border border-black rounded-full font-bold text-sm">
+            <span className="px-4 py-1 bg-[#FFD500] border border-black rounded-full font-bold text-sm text-black">
               LIVE
             </span>
           )}
 
           {!isSoldForDisplay && isComingStatus && !auctionEnded && (
-            <span className="px-4 py-1 bg-gray-200 text-gray-700 rounded-full font-bold text-sm">
+            <span className="px-4 py-1 bg-gray-700 text-gray-100 rounded-full font-bold text-sm">
               Queued
             </span>
           )}
 
           {!isSoldForDisplay && auctionEnded && (
-            <span className="px-4 py-1 bg-gray-300 text-gray-800 rounded-full font-bold text-sm">
+            <span className="px-4 py-1 bg-gray-600 text-gray-100 rounded-full font-bold text-sm">
               ENDED
             </span>
           )}
@@ -665,30 +669,30 @@ export default function PlaceBidPage() {
 
         {/* Listing summary */}
         <div>
-          <p className="text-xs text-gray-500 uppercase">Listing ID</p>
-          <p className="font-bold text-lg">{displayId}</p>
+          <p className="text-xs text-gray-400 uppercase">Listing ID</p>
+          <p className="font-bold text-lg text-gray-100">{displayId}</p>
 
           <h2
             className={`text-4xl font-extrabold mt-4 ${
-              isSoldForDisplay ? "text-red-700" : "text-green-700"
+              isSoldForDisplay ? "text-red-400" : "text-green-400"
             }`}
           >
             £{effectiveBaseBid.toLocaleString()}
           </h2>
-          <p className="text-gray-700">
+          <p className="text-gray-300">
             {isSoldForDisplay ? "Winning bid" : "Current Bid"}
           </p>
 
-          <p className="mt-4 font-semibold text-lg">
+          <p className="mt-4 font-semibold text-lg text-gray-100">
             {bidsCount} {bidsCount === 1 ? "Bid" : "Bids"}
           </p>
 
           {reserveMet && (
-            <p className="mt-2 font-bold text-green-700">Reserve Met</p>
+            <p className="mt-2 font-bold text-green-400">Reserve Met</p>
           )}
 
           {canShowBuyNow && (
-            <p className="mt-2 text-sm font-semibold text-blue-700">
+            <p className="mt-2 text-sm font-semibold text-blue-300">
               Buy Now available: £{buyNowPrice!.toLocaleString()}
             </p>
           )}
@@ -696,8 +700,8 @@ export default function PlaceBidPage() {
 
         {/* TIMER SECTION */}
         <div>
-          <p className="text-xs text-gray-500 uppercase">{timerLabel}</p>
-          <div className="inline-block mt-1 px-3 py-2 bg-white border border-black rounded-lg shadow-sm font-semibold text-black">
+          <p className="text-xs text-gray-400 uppercase">{timerLabel}</p>
+          <div className="inline-block mt-1 px-3 py-2 bg-black border border-yellow-600 rounded-lg shadow-sm font-semibold text-[#FFD500]">
             <LocalAuctionTimer
               start={auctionStart}
               end={auctionEnd}
@@ -707,17 +711,15 @@ export default function PlaceBidPage() {
         </div>
 
         {/* BID / LOGIN PANEL */}
-        <div className="bg-white border border-black rounded-xl p-6 shadow-sm space-y-4">
-          {/* ...rest of your existing content (unchanged)... */}
-
-          <p className="text-sm text-gray-700">
+        <div className="bg-[#181818] border border-gray-700 rounded-xl p-6 shadow-sm space-y-4">
+          <p className="text-sm text-gray-200">
             There will be an £80.00 fee added to all winning bids to process
             DVLA paperwork (auctionmyplate.co.uk has no affiliation with
             DVLA).
           </p>
 
           {/* DVLA / MOT WARNING */}
-          <div className="mt-3 border border-yellow-400 bg-yellow-50 rounded-lg p-3 text-sm text-yellow-900">
+          <div className="mt-3 border border-yellow-500 bg-yellow-50 rounded-lg p-3 text-sm text-yellow-900">
             <p className="font-semibold">Important notice</p>
             <p className="mt-1">
               Please be advised that this plate must go onto a vehicle which is{" "}
@@ -744,7 +746,9 @@ export default function PlaceBidPage() {
                     }
                   }}
                 />
-                <span>I understand and accept this notice.</span>
+                <span className="text-gray-900">
+                  I understand and accept this notice.
+                </span>
               </label>
             )}
             {loggedIn && vehicleNoticeAccepted && (
@@ -759,13 +763,13 @@ export default function PlaceBidPage() {
           {loggedIn && (
             <div className="space-y-2 mt-2">
               {checkingPaymentMethod && (
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-gray-400">
                   Checking your saved payment method…
                 </p>
               )}
 
               {paymentMethodError && (
-                <p className="bg-red-50 text-red-700 border border-red-200 p-2 rounded text-xs">
+                <p className="bg-red-900 text-red-100 border border-red-500 p-2 rounded text-xs">
                   {paymentMethodError}
                 </p>
               )}
@@ -773,7 +777,7 @@ export default function PlaceBidPage() {
               {hasPaymentMethod === false &&
                 !checkingPaymentMethod &&
                 !paymentMethodError && (
-                  <div className="bg-yellow-50 border border-yellow-300 text-yellow-900 p-3 rounded text-xs">
+                  <div className="bg-yellow-900 text-yellow-50 border border-yellow-600 p-3 rounded text-xs">
                     <p className="font-semibold">Action needed</p>
                     <p className="mt-1">
                       Before you can bid or use Buy Now, you must add a payment
@@ -781,7 +785,7 @@ export default function PlaceBidPage() {
                     </p>
                     <Link
                       href="/payment-method"
-                      className="mt-2 inline-block text-xs font-semibold text-blue-700 underline"
+                      className="mt-2 inline-block text-xs font-semibold text-yellow-200 underline"
                     >
                       Add / manage payment method
                     </Link>
@@ -792,9 +796,9 @@ export default function PlaceBidPage() {
 
           {!loggedIn ? (
             // LOGGED OUT
-            <div className="mt-4 border border-yellow-400 bg-[#FFFBE6] rounded-lg p-4 space-y-3">
-              <p className="font-semibold text-yellow-800">Log in to bid</p>
-              <p className="text-sm text-yellow-900">
+            <div className="mt-4 border border-yellow-600 bg-black rounded-lg p-4 space-y-3">
+              <p className="font-semibold text-[#FFD500]">Log in to bid</p>
+              <p className="text-sm text-gray-200">
                 You need an AuctionMyPlate account to place bids and use Buy
                 Now.
               </p>
@@ -807,7 +811,7 @@ export default function PlaceBidPage() {
                 </Link>
                 <Link
                   href="/register"
-                  className="px-5 py-2 rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 font-semibold text-sm"
+                  className="px-5 py-2 rounded-lg border border-blue-400 text-blue-200 hover:bg-blue-950 font-semibold text-sm"
                 >
                   Register
                 </Link>
@@ -815,13 +819,13 @@ export default function PlaceBidPage() {
             </div>
           ) : auctionEnded ? (
             // AUCTION ENDED / SOLD
-            <div className="mt-4 border border-red-300 bg-red-50 rounded-lg p-4 space-y-2">
-              <p className="font-semibold text-red-800">
+            <div className="mt-4 border border-red-700 bg-red-950 rounded-lg p-4 space-y-2">
+              <p className="font-semibold text-red-100">
                 {isSoldForDisplay
                   ? "This plate has been sold."
                   : "Auction has already ended."}
               </p>
-              <p className="text-sm text-red-900">
+              <p className="text-sm text-red-200">
                 No further bids or Buy Now purchases can be made on this
                 listing.
               </p>
@@ -830,18 +834,18 @@ export default function PlaceBidPage() {
             // LOGGED IN, LIVE/UPCOMING
             <>
               {error && (
-                <p className="bg-red-50 text-red-700 border border-red-200 p-3 rounded">
+                <p className="bg-red-950 text-red-100 border border-red-700 p-3 rounded">
                   {error}
                 </p>
               )}
 
               {success && (
-                <p className="bg-green-50 text-green-700 border border-green-200 p-3 rounded">
+                <p className="bg-green-950 text-green-100 border border-green-700 p-3 rounded">
                   {success}
                 </p>
               )}
 
-              <p className="text-sm text-gray-700">
+              <p className="text-sm text-gray-200">
                 Minimum bid:{" "}
                 <strong>£{minimumAllowed.toLocaleString()}</strong>
               </p>
@@ -852,7 +856,7 @@ export default function PlaceBidPage() {
                 onChange={(e) => setBidAmount(e.target.value)}
                 min={minimumAllowed}
                 placeholder={`£${minimumAllowed.toLocaleString()}`}
-                className="w-full border border-black rounded-lg p-3 text-lg text-center"
+                className="w-full border border-yellow-600 rounded-lg p-3 text-lg text-center bg-black text-gray-100"
               />
 
               <div className="flex flex-col sm:flex-row gap-3 mt-2">
@@ -869,7 +873,7 @@ export default function PlaceBidPage() {
                     !paymentBlocked &&
                     !checkingPaymentMethod
                       ? "bg-blue-600 hover:bg-blue-700"
-                      : "bg-gray-400 cursor-not-allowed"
+                      : "bg-gray-600 cursor-not-allowed"
                   }`}
                 >
                   {canBidOrBuyNow
@@ -897,7 +901,7 @@ export default function PlaceBidPage() {
                       !paymentBlocked &&
                       !checkingPaymentMethod
                         ? "bg-green-600 hover:bg-green-700 text-white"
-                        : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        : "bg-gray-600 text-gray-300 cursor-not-allowed"
                     }`}
                   >
                     {canBidOrBuyNow
@@ -917,7 +921,7 @@ export default function PlaceBidPage() {
                 <div className="mt-3">
                   <Link
                     href="/payment-method"
-                    className="text-xs text-blue-700 underline"
+                    className="text-xs text-blue-300 underline"
                   >
                     Manage payment method
                   </Link>
@@ -931,17 +935,19 @@ export default function PlaceBidPage() {
       {/* DESCRIPTION + HISTORY */}
       <div className="max-w-4xl mx-auto mt-6 mb-10 space-y-6">
         <div>
-          <h3 className="text-lg font-bold mb-2">Description</h3>
-          <div className="border rounded-lg p-4 bg-gray-50 text-sm text-gray-800 whitespace-pre-line">
+          <h3 className="text-lg font-bold mb-2 text-[#FFD500]">
+            Description
+          </h3>
+          <div className="border border-gray-700 rounded-lg p-4 bg-[#111111] text-sm text-gray-200 whitespace-pre-line">
             {listing.description || "No description has been added yet."}
           </div>
         </div>
 
         <div>
-          <h3 className="text-base font-bold mb-2">
+          <h3 className="text-base font-bold mb-2 text-[#FFD500]">
             Plate history &amp; interesting facts
           </h3>
-          <div className="border rounded-lg p-3 bg-white text-sm text-gray-800 whitespace-pre-line">
+          <div className="border border-gray-700 rounded-lg p-3 bg-[#111111] text-sm text-gray-200 whitespace-pre-line">
             {listing.interesting_fact ||
               "No extra history or interesting facts have been added yet."}
           </div>

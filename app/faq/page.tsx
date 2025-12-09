@@ -8,13 +8,13 @@ export const metadata = {
 
 export default function FaqPage() {
   return (
-    <main className="min-h-screen bg-[#FFFBEA] py-12 px-4">
-      <div className="max-w-5xl mx-auto bg-white shadow-md rounded-2xl p-8 md:p-12 border border-gray-200 space-y-10">
+    <main className="min-h-screen bg-black py-12 px-4 text-gray-100">
+      <div className="max-w-5xl mx-auto bg-[#111111] shadow-md rounded-2xl p-8 md:p-12 border border-yellow-700 space-y-10">
         <header className="space-y-3">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#FFD500]">
             Frequently Asked Questions
           </h1>
-          <p className="text-gray-700">
+          <p className="text-gray-200 text-sm md:text-base">
             How the DVLA transfer works, what a nominee is, and how long buyers
             and sellers should expect the process to take.
           </p>
@@ -22,17 +22,17 @@ export default function FaqPage() {
 
         {/* SECTION: Overview */}
         <section id="overview" className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold text-[#FFD500]">
             Who actually handles the DVLA transfer?
           </h2>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             DVLA is the government body that legally moves the registration
             number from one keeper or certificate to another. AuctionMyPlate
             acts as the paperwork middle-man: we collect the buyer&apos;s and
             seller&apos;s documents, prepare the DVLA application, submit it,
             and confirm to both parties when the transfer is complete.
           </p>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             You should think of it like this:{" "}
             <span className="font-semibold">
               DVLA make the legal change; AuctionMyPlate manages the process and
@@ -43,15 +43,17 @@ export default function FaqPage() {
 
         {/* SECTION: Grantee / Nominee */}
         <section id="grantee-nominee" className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold text-[#FFD500]">
             Plates on a DVLA certificate – grantee and nominee explained
           </h2>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             Many cherished registrations are held on a DVLA certificate:
           </p>
-          <ul className="list-disc pl-6 text-gray-800 space-y-1">
+          <ul className="list-disc pl-6 text-gray-200 space-y-1 text-sm md:text-base">
             <li>
-              <span className="font-semibold">V750 Certificate of Entitlement</span>{" "}
+              <span className="font-semibold">
+                V750 Certificate of Entitlement
+              </span>{" "}
               – a plate that&apos;s never been on a vehicle; or
             </li>
             <li>
@@ -60,10 +62,10 @@ export default function FaqPage() {
               &quot;on retention&quot;.
             </li>
           </ul>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             On these certificates you will usually see two names:
           </p>
-          <ul className="list-disc pl-6 text-gray-800 space-y-1">
+          <ul className="list-disc pl-6 text-gray-200 space-y-1 text-sm md:text-base">
             <li>
               <span className="font-semibold">Grantee / Purchaser</span> – the
               person who currently owns the right to the registration.
@@ -74,28 +76,31 @@ export default function FaqPage() {
               grantee&apos;s own car.
             </li>
           </ul>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             Only the <span className="font-semibold">grantee</span> can instruct
             DVLA to assign the number to a vehicle. The nominee does{" "}
             <span className="font-semibold">not</span> own the registration and
             has no rights over it until DVLA has actually assigned the number to
             a vehicle registered in their name. Once DVLA completes the
             assignment, the rights to that registration pass to the{" "}
-            <span className="font-semibold">registered keeper of the vehicle</span>.
+            <span className="font-semibold">
+              registered keeper of the vehicle
+            </span>
+            .
           </p>
         </section>
 
         {/* SECTION: Do I need to be nominee? */}
         <section id="need-nominee" className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold text-[#FFD500]">
             Do I have to be named as the nominee before I buy a plate?
           </h2>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             No. You do <span className="font-semibold">not</span> need to be
             named as the nominee on the certificate before you buy a plate
             through AuctionMyPlate.
           </p>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             DVLA allow the grantee to{" "}
             <span className="font-semibold">
               add or change a nominee up until, or at the same time as, the
@@ -104,10 +109,10 @@ export default function FaqPage() {
             to a vehicle. In plain English: we can update the details when we
             know who you are and which car the plate is going onto.
           </p>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             When you buy a plate that is held on a certificate:
           </p>
-          <ol className="list-decimal pl-6 text-gray-800 space-y-1">
+          <ol className="list-decimal pl-6 text-gray-200 space-y-1 text-sm md:text-base">
             <li>
               The seller (or AuctionMyPlate, if we hold the certificate) acts
               as the <span className="font-semibold">grantee</span>.
@@ -128,7 +133,7 @@ export default function FaqPage() {
               using DVLA&apos;s official online service.
             </li>
           </ol>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             You usually never need to deal with DVLA directly to change a
             nominee – we handle it as part of completing the transfer.
           </p>
@@ -136,10 +141,10 @@ export default function FaqPage() {
 
         {/* SECTION: Buyer timeline */}
         <section id="buyer-timeline" className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold text-[#FFD500]">
             Buyer timeline – how long does the transfer take?
           </h2>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             Timescales depend on how DVLA process the application. AuctionMyPlate
             submits your transfer promptly once payment has cleared and you have
             provided the documents we ask for. DVLA&apos;s own processing times
@@ -148,14 +153,15 @@ export default function FaqPage() {
           </p>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <div className="border rounded-xl p-4 bg-slate-50">
-              <h3 className="font-semibold text-gray-900 mb-2">
+            <div className="border rounded-xl p-4 bg-[#181818] border-gray-700">
+              <h3 className="font-semibold text-[#FFD500] mb-2">
                 Standard / online cases
               </h3>
-              <ul className="list-disc pl-5 text-gray-800 space-y-1 text-sm">
+              <ul className="list-disc pl-5 text-gray-200 space-y-1 text-sm">
                 <li>
                   Once we have everything we need, we normally submit the DVLA
-                  transfer within <span className="font-semibold">1–2 working days</span>.
+                  transfer within{" "}
+                  <span className="font-semibold">1–2 working days</span>.
                 </li>
                 <li>
                   Where DVLA can process the assignment online and no inspection
@@ -171,11 +177,11 @@ export default function FaqPage() {
               </ul>
             </div>
 
-            <div className="border rounded-xl p-4 bg-slate-50">
-              <h3 className="font-semibold text-gray-900 mb-2">
+            <div className="border rounded-xl p-4 bg-[#181818] border-gray-700">
+              <h3 className="font-semibold text-[#FFD500] mb-2">
                 Postal / complex cases
               </h3>
-              <ul className="list-disc pl-5 text-gray-800 space-y-1 text-sm">
+              <ul className="list-disc pl-5 text-gray-200 space-y-1 text-sm">
                 <li>
                   If DVLA require a postal application or extra checks (for
                   example vehicle-to-vehicle transfer or missing paperwork),
@@ -202,10 +208,10 @@ export default function FaqPage() {
 
         {/* SECTION: When should buyers order / fit plates? */}
         <section id="order-fit-plates" className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold text-[#FFD500]">
             When should I order and fit my physical plates?
           </h2>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             You must{" "}
             <span className="font-semibold">
               never display a registration on a vehicle until DVLA has assigned
@@ -213,10 +219,8 @@ export default function FaqPage() {
             </span>
             . Doing so can result in fines and the registration being withdrawn.
           </p>
-          <p className="text-gray-800">
-            Our guidance is:
-          </p>
-          <ul className="list-disc pl-6 text-gray-800 space-y-1">
+          <p className="text-gray-200 text-sm md:text-base">Our guidance is:</p>
+          <ul className="list-disc pl-6 text-gray-200 space-y-1 text-sm md:text-base">
             <li>
               <span className="font-semibold">
                 Wait until AuctionMyPlate confirms the DVLA assignment is
@@ -241,10 +245,10 @@ export default function FaqPage() {
 
         {/* SECTION: Seller timeline */}
         <section id="seller-timeline" className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold text-[#FFD500]">
             Seller timeline – when do I get paid?
           </h2>
-          <p className="text-gray-800">
+          <p className="text-gray-200 text-sm md:text-base">
             For security and to protect buyers and sellers, AuctionMyPlate{" "}
             <span className="font-semibold">
               only releases sale proceeds once the DVLA transfer is complete
@@ -252,11 +256,11 @@ export default function FaqPage() {
             and the registration has safely left your control.
           </p>
 
-          <div className="border rounded-xl p-4 bg-slate-50">
-            <h3 className="font-semibold text-gray-900 mb-2">
+          <div className="border rounded-xl p-4 bg-[#181818] border-gray-700">
+            <h3 className="font-semibold text-[#FFD500] mb-2">
               Typical seller journey
             </h3>
-            <ol className="list-decimal pl-6 text-gray-800 space-y-1 text-sm">
+            <ol className="list-decimal pl-6 text-gray-200 space-y-1 text-sm">
               <li>
                 Your plate sells and the buyer&apos;s payment clears via Stripe.
               </li>
@@ -281,15 +285,15 @@ export default function FaqPage() {
             </ol>
           </div>
 
-          <div className="border rounded-xl p-4 bg-slate-50">
-            <h3 className="font-semibold text-gray-900 mb-2">
+          <div className="border rounded-xl p-4 bg-[#181818] border-gray-700">
+            <h3 className="font-semibold text-[#FFD500] mb-2">
               Maximum payout timing
             </h3>
-            <p className="text-gray-800 text-sm mb-2">
+            <p className="text-gray-200 text-sm mb-2">
               Our aim is to pay sellers as quickly as possible while keeping the
               process secure:
             </p>
-            <ul className="list-disc pl-6 text-gray-800 space-y-1 text-sm">
+            <ul className="list-disc pl-6 text-gray-200 space-y-1 text-sm">
               <li>
                 In most straightforward cases, you should receive your funds{" "}
                 <span className="font-semibold">
@@ -316,9 +320,9 @@ export default function FaqPage() {
         </section>
 
         {/* SECTION: Summary */}
-        <section id="summary" className="space-y-3 border-t pt-6">
-          <h2 className="text-2xl font-semibold text-gray-900">In summary</h2>
-          <p className="text-gray-800">
+        <section id="summary" className="space-y-3 border-t border-gray-700 pt-6">
+          <h2 className="text-2xl font-semibold text-[#FFD500]">In summary</h2>
+          <p className="text-gray-200 text-sm md:text-base">
             AuctionMyPlate manages the DVLA process end-to-end: certificates,
             grantee / nominee details, and assignment to the buyer&apos;s
             vehicle. Buyers should wait for our confirmation before fitting

@@ -1,0 +1,26 @@
+<div className="relative w-full h-[260px] sm:h-[360px] lg:h-[420px] overflow-hidden rounded-xl">
+  <video
+    autoPlay
+    loop
+    muted
+    playsInline
+    className="w-full h-full object-cover"
+  >
+    <source src="/videos/hero-plate.mp4" type="video/mp4" />
+  </video>
+
+  {/* Optional dark overlay for text readability */}
+  <div className="absolute inset-0 bg-black/30" />
+
+  {/* Text overlay */}
+  <div className="absolute inset-0 flex items-center justify-center">
+    <div className="text-center text-white px-4">
+      <h1 className="text-2xl sm:text-3xl font-bold mb-2">
+        Auction your plate with confidence
+      </h1>
+      <p className="text-sm sm:text-base">
+        Weekly UK number plate auctions, DVLA-compliant from start to finish.
+      </p>
+    </div>
+  </div>
+</div>

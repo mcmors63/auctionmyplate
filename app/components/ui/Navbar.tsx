@@ -34,6 +34,7 @@ export default function Navbar() {
 
     const load = async () => {
       try {
+        setLoadingUser(true);
         const current = await account.get();
         if (!alive) return;
         setUser(current as User);
@@ -47,10 +48,12 @@ export default function Navbar() {
     };
 
     void load();
+
     return () => {
       alive = false;
     };
-  }, []);
+    // 👇 re-check session whenever the route changes
+  }, [pathname]);
 
   const isAdmin = user?.email === "admin@auctionmyplate.co.uk";
 
@@ -72,7 +75,6 @@ export default function Navbar() {
     { href: "/how-it-works", label: "How It Works" },
     { href: "/current-listings", label: "Current Listings" },
     { href: "/sell-my-plate", label: "Sell My Plate" },
-    // ✅ FIXED: point to your existing /dvla page
     { href: "/dvla", label: "DVLA Guidelines" },
     { href: "/faq", label: "FAQ" },
   ];

@@ -1,3 +1,4 @@
+// app/register/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -90,7 +91,7 @@ export default function RegisterPage() {
   // VALIDATION
   // ─────────────────────────────────────────────
   const validateFields = () => {
-    const errors: any = {};
+    const errors: Record<string, string> = {};
 
     if (!formData.first_name.trim()) errors.first_name = "Required";
     if (!formData.surname.trim()) errors.surname = "Required";
@@ -233,19 +234,19 @@ export default function RegisterPage() {
         formData.password
       );
 
-     // Send verification
-const verifyUrl = `${window.location.origin.replace(/\/$/, "")}/verified`;
-await account.createVerification(verifyUrl);
+      // Send verification
+      const verifyUrl = `${window.location.origin.replace(/\/$/, "")}/verified`;
+      await account.createVerification(verifyUrl);
 
-// Save profile  ✅ FIXED: use PROFILES db + collection env vars
-await databases.createDocument(
-  process.env.NEXT_PUBLIC_APPWRITE_PROFILES_DATABASE_ID!,
-  process.env.NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID!,
-  ID.unique(),
-  {
-    first_name: formData.first_name,
-    surname: formData.surname,
-    house: formData.house,
+      // Save profile  ✅ PROFILES DB + collection env vars
+      await databases.createDocument(
+        process.env.NEXT_PUBLIC_APPWRITE_PROFILES_DATABASE_ID!,
+        process.env.NEXT_PUBLIC_APPWRITE_PROFILES_COLLECTION_ID!,
+        ID.unique(),
+        {
+          first_name: formData.first_name,
+          surname: formData.surname,
+          house: formData.house,
           street: formData.street,
           town: formData.town,
           county: formData.county,
@@ -316,7 +317,7 @@ await databases.createDocument(
           placeholder={placeholder}
           value={value}
           onChange={handleChange}
-          className={`border rounded-md px-3 py-2 w-full pr-10 ${
+          className={`border rounded-md px-3 py-2 w-full pr-10 text-sm bg-white text-gray-900 ${
             err
               ? "border-red-500 bg-red-50"
               : value
@@ -326,14 +327,15 @@ await databases.createDocument(
         />
 
         {value && !err && (
-          <CheckCircleIcon className="w-5 h-5 text-green-600 absolute right-2 top-3" />
+          <CheckCircleIcon className="w-5 h-5 text-green-600 absolute right-2 top-2.5" />
         )}
         {err && (
-          <XCircleIcon className="w-5 h-5 text-red-500 absolute right-2 top-3" />
+          <XCircleIcon className="w-5 h-5 text-red-500 absolute right-2 top-2.5" />
         )}
 
         {toggle && (
-          <div
+          <button
+            type="button"
             onClick={toggleFn}
             className="absolute right-8 top-2.5 text-gray-600 cursor-pointer"
           >
@@ -342,10 +344,10 @@ await databases.createDocument(
             ) : (
               <EyeIcon className="w-5 h-5" />
             )}
-          </div>
+          </button>
         )}
 
-        {err && <p className="text-xs text-red-600 mt-1">{err}</p>}
+        {err && <p className="text-xs text-red-400 mt-1">{err}</p>}
       </div>
     );
   };
@@ -354,22 +356,26 @@ await databases.createDocument(
   // RENDER
   // ─────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex justify-center items-center bg-gray-50 p-6">
-      <div className="w-full max-w-lg bg-white shadow-md rounded-xl p-8">
-        <h1 className="text-2xl font-bold text-center mb-4">
-          Create Your Account
+    <main className="min-h-screen bg-black flex items-center justify-center px-4 py-10 text-gray-100">
+      <div className="w-full max-w-lg bg-[#111111] shadow-lg rounded-2xl border border-yellow-700/60 p-8">
+        <h1 className="text-2xl font-extrabold text-yellow-400 text-center mb-1">
+          Create Your AuctionMyPlate Account
         </h1>
+        <p className="text-xs text-gray-300 text-center mb-5">
+          One account to bid on plates, list your own registrations and manage
+          DVLA paperwork.
+        </p>
 
         {error && (
-          <p className="bg-red-100 text-red-700 p-2 rounded-md mb-4 text-center">
+          <p className="bg-red-900/40 text-red-200 border border-red-500 p-2 rounded-md mb-4 text-xs text-center">
             {error}
           </p>
         )}
 
         {success && (
-          <p className="bg-green-100 text-green-700 p-2 rounded-md mb-4 text-center">
-            ✅ Registration successful! Please check your email to verify your
-            account.
+          <p className="bg-green-900/40 text-green-200 border border-green-500 p-2 rounded-md mb-4 text-xs text-center">
+            ✅ Registration successful. Please check your email and click the
+            link to verify your account before logging in.
           </p>
         )}
 
@@ -385,12 +391,14 @@ await databases.createDocument(
             {!manualEntry && (
               <>
                 <div className="flex gap-2">
-                  {renderInput("postcode", "ENTER POSTCODE")}
+                  <div className="flex-1">
+                    {renderInput("postcode", "ENTER POSTCODE")}
+                  </div>
                   <button
                     type="button"
                     onClick={handleFindAddress}
                     disabled={addressLoading}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
+                    className="bg-yellow-500 hover:bg-yellow-600 text-black px-4 py-2 rounded-md text-xs font-semibold whitespace-nowrap disabled:opacity-60"
                   >
                     {addressLoading ? "Searching…" : "Find"}
                   </button>
@@ -398,19 +406,21 @@ await databases.createDocument(
 
                 {addresses.length > 0 && (
                   <select
-                    className="border rounded-md px-3 py-2 w-full"
+                    className="border rounded-md px-3 py-2 w-full text-sm mt-1 bg-[#111111] text-gray-100 border-gray-600"
                     value={selectedAddress}
                     onChange={(e) => handleSelectAddress(e.target.value)}
                   >
                     <option value="">Select Address</option>
                     {addresses.map((a, i) => (
-                      <option key={i}>{a}</option>
+                      <option key={i} className="bg-black text-gray-100">
+                        {a}
+                      </option>
                     ))}
                   </select>
                 )}
 
                 <p
-                  className="text-sm text-blue-600 underline cursor-pointer text-center"
+                  className="text-xs text-yellow-300 underline cursor-pointer text-center mt-1"
                   onClick={() => setManualEntry(true)}
                 >
                   Can&apos;t find your address? Enter manually
@@ -428,7 +438,7 @@ await databases.createDocument(
 
                 {manualEntry && (
                   <p
-                    className="text-sm text-blue-600 underline cursor-pointer text-center"
+                    className="text-xs text-yellow-300 underline cursor-pointer text-center"
                     onClick={() => setManualEntry(false)}
                   >
                     Use postcode lookup instead
@@ -444,7 +454,7 @@ await databases.createDocument(
             {/* Strength bar */}
             {formData.password && (
               <div>
-                <div className="h-2 bg-gray-200 rounded-full">
+                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className={`h-2 rounded-full ${passwordStrength.color}`}
                     style={{
@@ -452,7 +462,7 @@ await databases.createDocument(
                     }}
                   />
                 </div>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-gray-300 mt-1">
                   {passwordStrength.label}
                 </p>
               </div>
@@ -461,34 +471,48 @@ await databases.createDocument(
             {renderInput("confirm", "Confirm Password", "password", true)}
 
             {/* TERMS */}
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2 mt-2">
               <input
                 type="checkbox"
                 name="agree"
                 checked={formData.agree}
                 onChange={handleChange}
+                className="mt-1"
               />
-              <label className="text-sm">
+              <label className="text-xs text-gray-200">
                 I agree to the{" "}
                 <span
-                  className="text-blue-600 underline cursor-pointer"
+                  className="text-yellow-300 underline cursor-pointer"
                   onClick={() => setShowTerms(true)}
                 >
                   Terms &amp; Conditions
-                </span>
+                </span>{" "}
+                and understand how my data is used as set out in the Privacy
+                Policy.
               </label>
             </div>
             {fieldErrors.agree && (
-              <p className="text-xs text-red-600">{fieldErrors.agree}</p>
+              <p className="text-xs text-red-400">{fieldErrors.agree}</p>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-md font-semibold disabled:opacity-50"
+              className="w-full mt-2 bg-yellow-500 hover:bg-yellow-600 text-black py-2.5 rounded-md font-semibold text-sm disabled:opacity-60"
             >
-              {loading ? "Creating..." : "Register"}
+              {loading ? "Creating your account…" : "Create account"}
             </button>
+
+            <p className="text-[11px] text-gray-400 text-center mt-2">
+              Already registered?{" "}
+              <a
+                href="/login"
+                className="text-yellow-300 underline font-semibold"
+              >
+                Login here
+              </a>
+              .
+            </p>
           </form>
         )}
       </div>
@@ -518,7 +542,7 @@ await databases.createDocument(
               </button>
             </div>
 
-            {/* Body (same content as main site) */}
+            {/* Body (shortened signup version of main Terms) */}
             <div className="px-6 py-5 overflow-y-auto max-h-[70vh] text-sm leading-relaxed text-gray-800 space-y-6">
               <p>
                 These Terms and Conditions govern your use of
@@ -710,8 +734,7 @@ await databases.createDocument(
 
               <h3 className="font-semibold text-lg">15. Contact</h3>
               <p>
-                For support:{" "}
-                <strong>support@auctionmyplate.co.uk</strong>
+                For support: <strong>support@auctionmyplate.co.uk</strong>
               </p>
             </div>
 
@@ -727,6 +750,6 @@ await databases.createDocument(
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

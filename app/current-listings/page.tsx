@@ -31,7 +31,7 @@ export default function CurrentListingsPage() {
       try {
         setLoading(true);
 
-        // 👇 Include BOTH live + sold so Buy-Now lots stay on the page
+        // Include BOTH live + sold so Buy-Now lots stay on the page
         const liveRes = await databases.listDocuments(DB_ID, COLLECTION_ID, [
           Query.equal("status", ["live", "sold"]),
         ]);
@@ -103,71 +103,83 @@ export default function CurrentListingsPage() {
   // RETURN JSX
   // ------------------------------------------------------------
   return (
-    <main className="min-h-screen bg-[#F5F5F5] text-gray-900">
-      {/* DVLA HEADER BAR */}
-      <div className="w-full bg-yellow-300 border-b-4 border-black py-4 text-center">
-        <h2 className="text-xl font-extrabold text-black tracking-wide uppercase"></h2>
-      </div>
-
-      <div className="px-6 py-12">
-        {/* PAGE TITLE */}
-        <h1 className="text-center text-4xl font-extrabold text-black mb-10 tracking-tight">
-          Current Listings
-        </h1>
+    <main className="min-h-screen bg-black text-gray-100 py-10 px-4">
+      <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-lg border border-yellow-100 p-6 md:p-8">
+        {/* HEADER */}
+        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-6">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-yellow-400 tracking-tight">
+              Current Listings
+            </h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Browse live auctions and queued plates ready for upcoming sales.
+            </p>
+          </div>
+        </header>
 
         {/* TABS */}
-        <div className="max-w-xl mx-auto flex justify-center gap-4 mb-8">
+        <div className="flex justify-center md:justify-start gap-3 mb-6 border-b border-gray-200 pb-3">
           <button
             onClick={() => setTab("live")}
-            className={`px-6 py-3 rounded-lg font-bold transition border ${
+            className={`px-4 md:px-5 py-2 text-sm md:text-base font-semibold rounded-full border transition ${
               tab === "live"
-                ? "bg-black text-white border-black shadow-md"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                ? "bg-yellow-500 text-white border-yellow-500 shadow-sm"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
             }`}
           >
-            Live
+            Live Auctions
           </button>
 
           <button
             onClick={() => setTab("soon")}
-            className={`px-6 py-3 rounded-lg font-bold transition border ${
+            className={`px-4 md:px-5 py-2 text-sm md:text-base font-semibold rounded-full border transition ${
               tab === "soon"
-                ? "bg-black text-white border-black shadow-md"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                ? "bg-yellow-500 text-white border-yellow-500 shadow-sm"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
             }`}
           >
-            Queued
+            Queued / Coming Soon
           </button>
         </div>
 
         {/* FILTER BAR */}
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 bg-white border border-gray-300 p-4 rounded-xl shadow-sm mb-10">
-          <input
-            type="text"
-            placeholder="Search registration…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full md:w-1/3 px-4 py-2 rounded-lg bg-white border border-gray-400 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-black"
-          />
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-[#FFFCF3] border border-yellow-100 p-4 rounded-xl mb-8">
+          <div className="w-full md:w-1/2">
+            <label className="block text-xs font-semibold text-yellow-500 mb-1">
+              Search by registration
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. AB12 CDE"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500"
+            />
+          </div>
 
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="w-full md:w-1/4 px-4 py-2 rounded-lg bg-white border border-gray-400 text-gray-900 focus:outline-none focus:border-black"
-          >
-            <option value="ending">Ending Soon</option>
-            <option value="newest">Newest</option>
-            <option value="az">A → Z</option>
-            <option value="priceLow">Price (Low → High)</option>
-            <option value="priceHigh">Price (High → Low)</option>
-          </select>
+          <div className="w-full md:w-1/3">
+            <label className="block text-xs font-semibold text-yellow-500 mb-1">
+              Sort listings
+            </label>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm text-gray-900 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500"
+            >
+              <option value="ending">Ending Soon</option>
+              <option value="newest">Newest</option>
+              <option value="az">Registration A → Z</option>
+              <option value="priceLow">Price (Low → High)</option>
+              <option value="priceHigh">Price (High → Low)</option>
+            </select>
+          </div>
         </div>
 
         {/* GRID */}
         <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {loading && (
-            <p className="col-span-full text-center text-gray-500">
-              Loading…
+            <p className="col-span-full text-center text-gray-500 text-sm">
+              Loading listings…
             </p>
           )}
 
@@ -180,7 +192,7 @@ export default function CurrentListingsPage() {
 
           {!loading &&
             filtered.filter((l) => l && l.$id).length === 0 && (
-              <p className="col-span-full text-center text-gray-600">
+              <p className="col-span-full text-center text-gray-600 text-sm">
                 No listings match your filters.
               </p>
             )}

@@ -8,14 +8,14 @@ export const metadata: Metadata = {
 
 export default function HowItWorksPage() {
   return (
-    <main className="min-h-screen bg-[#FFFBEA] py-10 px-4">
-      <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-md border border-yellow-100 p-8">
+    <main className="min-h-screen bg-black text-gray-100 py-10 px-4">
+      <div className="max-w-5xl mx-auto bg-[#111111] rounded-2xl shadow-lg border border-yellow-600/70 p-8 md:p-10">
         {/* Title */}
-        <h1 className="text-3xl md:text-4xl font-extrabold text-yellow-700 mb-4">
+        <h1 className="text-3xl md:text-4xl font-extrabold text-[#FFD500] mb-4">
           How AuctionMyPlate Works
         </h1>
 
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="text-sm md:text-base text-gray-300 mb-6">
           AuctionMyPlate.co.uk is a dedicated UK marketplace for cherished
           number plates. This page explains, in plain English, how auctions
           work for both buyers and sellers, what fees apply, and what happens
@@ -24,10 +24,10 @@ export default function HowItWorksPage() {
 
         {/* 1. Overview */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             1. The Basics
           </h2>
-          <ul className="list-disc ml-5 space-y-2 text-sm text-gray-800 leading-relaxed">
+          <ul className="list-disc ml-5 space-y-2 text-sm md:text-base text-gray-100 leading-relaxed">
             <li>
               Plates are listed into weekly online auctions. You can{" "}
               <strong>bid</strong> or, where available, use{" "}
@@ -40,17 +40,20 @@ export default function HowItWorksPage() {
             <li>
               We handle the online process and the DVLA assignment paperwork,
               but we are{" "}
-              <strong>not affiliated, authorised or endorsed by DVLA</strong>.
+              <strong>
+                not affiliated, authorised or endorsed by DVLA
+              </strong>
+              .
             </li>
           </ul>
         </section>
 
         {/* 2. For Buyers */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             2. Buying a Plate – Step by Step
           </h2>
-          <ol className="list-decimal ml-5 space-y-3 text-sm text-gray-800 leading-relaxed">
+          <ol className="list-decimal ml-5 space-y-3 text-sm md:text-base text-gray-100 leading-relaxed">
             <li>
               <strong>Create an account</strong> and verify your email. You can
               then browse and bid on live auctions.
@@ -82,10 +85,10 @@ export default function HowItWorksPage() {
 
         {/* 3. For Sellers */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             3. Selling a Plate – Step by Step
           </h2>
-          <ol className="list-decimal ml-5 space-y-3 text-sm text-gray-800 leading-relaxed">
+          <ol className="list-decimal ml-5 space-y-3 text-sm md:text-base text-gray-100 leading-relaxed">
             <li>
               <strong>Register and complete your profile.</strong> We need your
               full contact details so we can pay out funds and verify ownership.
@@ -122,13 +125,13 @@ export default function HowItWorksPage() {
 
         {/* 4. Auction rules & soft close */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             4. Auction Timing & Soft Close
           </h2>
-          <p className="text-sm text-gray-800 leading-relaxed mb-2">
+          <p className="text-sm md:text-base text-gray-100 leading-relaxed mb-2">
             Auctions normally run within a weekly window. Some key rules:
           </p>
-          <ul className="list-disc ml-5 space-y-2 text-sm text-gray-800 leading-relaxed">
+          <ul className="list-disc ml-5 space-y-2 text-sm md:text-base text-gray-100 leading-relaxed">
             <li>
               <strong>Soft close:</strong> if a bid is placed in the final
               minutes of an auction, the end time may be extended to reduce
@@ -147,10 +150,10 @@ export default function HowItWorksPage() {
 
         {/* 5. Fees */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             5. Fees & Charges
           </h2>
-          <ul className="list-disc ml-5 space-y-2 text-sm text-gray-800 leading-relaxed">
+          <ul className="list-disc ml-5 space-y-2 text-sm md:text-base text-gray-100 leading-relaxed">
             <li>
               <strong>DVLA Assignment Fee – £80.00</strong> is added to all
               winning bids. This covers the cost of processing the registration
@@ -168,12 +171,12 @@ export default function HowItWorksPage() {
               before you submit a plate.
             </li>
           </ul>
-          <p className="text-xs text-gray-600 mt-3">
+          <p className="text-xs md:text-sm text-gray-400 mt-3">
             For full legal details on fees and responsibilities, please read
             our{" "}
             <a
               href="/terms"
-              className="text-yellow-700 underline hover:text-yellow-800"
+              className="text-[#FFD500] underline hover:text-yellow-300"
             >
               Terms &amp; Conditions
             </a>
@@ -183,10 +186,10 @@ export default function HowItWorksPage() {
 
         {/* 6. After you win */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             6. What Happens After You Win?
           </h2>
-          <ol className="list-decimal ml-5 space-y-3 text-sm text-gray-800 leading-relaxed">
+          <ol className="list-decimal ml-5 space-y-3 text-sm md:text-base text-gray-100 leading-relaxed">
             <li>
               You receive confirmation in your dashboard (and usually by
               email) that you are the winning bidder or Buy Now purchaser.
@@ -212,10 +215,10 @@ export default function HowItWorksPage() {
 
         {/* 7. DVLA disclaimer */}
         <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             7. DVLA & Legal Display
           </h2>
-          <p className="text-sm text-gray-800 leading-relaxed mb-2">
+          <p className="text-sm md:text-base text-gray-100 leading-relaxed mb-2">
             AuctionMyPlate.co.uk is{" "}
             <strong>
               not affiliated, authorised, endorsed or associated with the
@@ -223,7 +226,7 @@ export default function HowItWorksPage() {
             </strong>{" "}
             or any UK government organisation.
           </p>
-          <ul className="list-disc ml-5 space-y-2 text-sm text-gray-800 leading-relaxed">
+          <ul className="list-disc ml-5 space-y-2 text-sm md:text-base text-gray-100 leading-relaxed">
             <li>
               It is the vehicle keeper’s responsibility to ensure the plate is
               displayed legally (correct font, spacing, colouring and
@@ -238,16 +241,16 @@ export default function HowItWorksPage() {
 
         {/* 8. Need help */}
         <section>
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">
+          <h2 className="text-xl font-semibold text-[#FFD500] mb-3">
             8. Need Help or Have Questions?
           </h2>
-          <p className="text-sm text-gray-800 leading-relaxed">
+          <p className="text-sm md:text-base text-gray-100 leading-relaxed">
             If you are unsure about any part of the process, or you are a
             first-time buyer or seller of a cherished plate, you can contact us
             at{" "}
             <a
               href="mailto:support@auctionmyplate.co.uk"
-              className="text-yellow-700 underline hover:text-yellow-800"
+              className="text-[#FFD500] underline hover:text-yellow-300"
             >
               support@auctionmyplate.co.uk
             </a>

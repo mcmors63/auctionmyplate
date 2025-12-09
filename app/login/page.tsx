@@ -157,30 +157,30 @@ export default function LoginPage() {
   // RENDER
   // ---------------------------------
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#FFFBEA] px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-yellow-100 p-6">
-        <h1 className="text-2xl font-extrabold text-yellow-700 mb-1">
+    <main className="min-h-screen flex items-center justify-center bg-black px-4 text-gray-100">
+      <div className="w-full max-w-md bg-[#111111] rounded-2xl shadow-lg border border-yellow-700/60 p-6">
+        <h1 className="text-2xl font-extrabold text-yellow-400 mb-1">
           Login
         </h1>
-        <p className="text-xs text-gray-600 mb-4">
+        <p className="text-xs text-gray-400 mb-4">
           Enter your email and password to access your dashboard.
         </p>
 
         {error && (
-          <div className="mb-3 text-xs bg-red-50 border border-red-200 text-red-700 rounded-md px-3 py-2">
+          <div className="mb-3 text-xs bg-red-900/30 border border-red-600 text-red-200 rounded-md px-3 py-2">
             {error}
           </div>
         )}
 
         {lockoutMessage() && (
-          <div className="mb-3 text-[11px] bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-md px-3 py-2">
+          <div className="mb-3 text-[11px] bg-yellow-900/30 border border-yellow-600 text-yellow-200 rounded-md px-3 py-2">
             {lockoutMessage()}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">
+            <label className="block text-xs font-semibold text-yellow-400 mb-1 uppercase tracking-wide">
               Email
             </label>
             <input
@@ -188,12 +188,12 @@ export default function LoginPage() {
               value={email}
               autoComplete="email"
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border rounded-md px-3 py-2 text-sm"
+              className="w-full border border-neutral-700 rounded-md px-3 py-2 text-sm bg-black text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">
+            <label className="block text-xs font-semibold text-yellow-400 mb-1 uppercase tracking-wide">
               Password
             </label>
             <input
@@ -201,15 +201,15 @@ export default function LoginPage() {
               value={password}
               autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border rounded-md px-3 py-2 text-sm"
+              className="w-full border border-neutral-700 rounded-md px-3 py-2 text-sm bg-black text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
             />
           </div>
 
           {/* Forgot password link */}
-          <div className="flex justify-between items-center text-[11px] text-gray-600">
+          <div className="flex justify-between items-center text-[11px] text-gray-400">
             <Link
               href="/reset-password"
-              className="text-blue-600 hover:underline"
+              className="text-yellow-400 hover:underline"
             >
               Forgot your password?
             </Link>
@@ -221,17 +221,17 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting || isLocked()}
-            className="w-full mt-1 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2.5 rounded-md text-sm disabled:opacity-50"
+            className="w-full mt-1 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2.5 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? "Logging in…" : "Login"}
           </button>
         </form>
 
-        <p className="mt-4 text-xs text-gray-600 text-center">
+        <p className="mt-4 text-xs text-gray-400 text-center">
           Don&apos;t have an account?{" "}
           <Link
             href="/register"
-            className="text-blue-600 hover:underline font-semibold"
+            className="text-yellow-400 hover:underline font-semibold"
           >
             Register here
           </Link>
